@@ -1,0 +1,502 @@
+*Deck SCWR64Lib.c2m normal version DRAGLIB
+*--------------------
+* Nom          : SCWR64Lib.c2m
+* Utilisation  : Melange dans les cellules (eau et gaine)
+* Auteur       : U. Le Tennier 
+* Date         : 07/06/2019
+* Modifier     : 2019/10/23 Ajouter variable ITERATION
+*
+*---------------------------
+* DESCRIPTION DE LA PROCEDURE 
+* Creation de la bibliotheque de sections efficaces et des differents mixs 
+* 64 crayons de combustible
+*
+* BiblioInt := SCWR64Lib  :: <<ITERATION>>
+*                            <<TempCaloUp>> <<TempCaloDw>> 
+*                            <<DensCaloUp>> <<DensCaloDw>>
+*                            <<TempFuel>>   <<TempLiner>>   
+*                            <<TempTubFrc>> <<TempMod>> 
+*                            <<TempGaine>>  <<TempIsol>>   
+*                            <<DensMod>>    <<ConcBore>>   
+*                            <<Maillage>>                  ;
+* 
+* DRAGLIB avec ENDFB-V.II
+*
+* REELS ECHANGEES  
+* TempCaloUp   : Temperature du caloporteur qui remonte               (K)
+* TempCaloDw   : Temperature du caloporteur qui descend               (K)
+* DensCaloUp   : Densite du caloporteur qui remonte                   (g/cm3)
+* DensCaloDw   : Densite du caloporteur qui descend (quasi constante) (g/cm3)
+* TempFuel     : Temperature combustible                              (K)
+* TempLiner    : Temperature liner (une Temp unique pour tous)        (K)
+* TempTubFrc   : Temperature tube de force                            (K)
+* TempGaine    : Temperature gaine                                    (K)
+* TempIsol     : Temperature de l isolant                             (K)
+* DensMod      : Densite du modérateur                                (g/cm3)
+*
+*
+* REELS INTERNES
+* WgtH1Calo    : Pourcentage massique H dans caloporteur 
+* WgtD2Calo    : Pourcentage massique D dans caloporteur
+* Wgt016Calo   : Pourcentage massique O dans caloporteur
+* PureteCalo   : Purete du moderateur (D/H)
+* WgtH1Mod     : Pourcentage massique H dans moderateur 
+* WgtD2Mod     : Pourcentage massique D dans moderateur  
+* Wgt016Mod    : Pourcentage massique O dans moderateur 
+* PureteMod    : Purete du moderateur (D/H)
+*
+* FICHIERS ECHANGES 
+* BiblioInt    : Biliotheque interne requise pour les calculs
+*
+*---------------------------------------------------------------
+* Definition des modules, procédures et structures de données
+*---------------------------------------------------------------
+PARAMETER BiblioInt :: 
+    ::: LINKED_LIST BiblioInt ; ;
+MODULE INFO: LIB: DELETE: END: ;
+*---------------------------------------------------------------
+* Lecture des variables échangées
+*---------------------------------------------------------------
+INTEGER ITERATION ;
+::         >>ITERATION<<                                               ;
+REAL        TempCaloUp     TempCaloDw     DensCaloUp     DensCaloDw    ;
+::        >>TempCaloUp<< >>TempCaloDw<< >>DensCaloUp<< >>DensCaloDw<<  ;
+REAL        TempFuel       TempLiner      TempTubFrc     TempMod
+            TempGaine      TempIsol       DensMod        ConcBore      ;
+::        >>TempFuel<<   >>TempLiner<<  >>TempTubFrc<< >>TempMod<<
+          >>TempGaine<<  >>TempIsol<<   >>DensMod<<    >>ConcBore<<    ;
+INTEGER      Maillage                                                  ;
+::         >>Maillage<<                                                ;
+*
+*  Calcul concentration bore en pourcent pour 
+REAL CB10pct := ConcBore 0.0001 * 0.18430943 * ;
+REAL CB11pct := ConcBore 0.0001 * 0.81569057 * ;
+*---------------------------------------------------------------
+* Definition des variables locales
+*---------------------------------------------------------------
+REAL WgtH1Calo  WgtD2Calo  Wgt016Calo PureteCalo
+     WgtH1Mod   WgtD2Mod   Wgt016Mod  PureteMod      ;
+REAL C01 C02 C03 C04 C05 
+     C06 C07 C08 C09 C10
+     C11 C12 C13 C14 C15 C16 C17
+     C21 C22 C23 C24 C25
+     C26 C27 C28 C29 C30 
+     C31 C32 C33 C34 C35 C36 C37    ;
+
+STRING    NomBiblio                                  ;
+
+*---------------------------------------------------------------
+* Definition purete caloporteur et moderateur + 96 mixs
+*---------------------------------------------------------------
+EVALUATE PureteCalo := 0.0156 ;
+EVALUATE PureteMod  := 99.833 ;
+*----
+* Donnee combustible
+*----
+IF ITERATION 1 = THEN
+* Fuel interne 0-3 m (11.293 % Pu)
+  EVALUATE C01 :=  2.75 11.293 * 100. / ;
+  EVALUATE C02 := 51.96 11.293 * 100. / ;
+  EVALUATE C03 := 22.96 11.293 * 100. / ;
+  EVALUATE C04 := 15.23 11.293 * 100. / ; 
+  EVALUATE C05 :=  7.1  11.293 * 100. / ; 
+* conso interne 0-3 m (10.954 % Pu + 2.603 % Gd)
+  EVALUATE C06 :=  2.75 10.954 * 100. /  ;
+  EVALUATE C07 := 51.96 10.954 * 100. /  ;
+  EVALUATE C08 := 22.96 10.954 * 100. /  ;
+  EVALUATE C09 := 15.23 10.954 * 100. /  ;
+  EVALUATE C10 :=  7.1  10.954 * 100. /  ;
+  EVALUATE C11 := 0.19322 2.603 * 100. / ;
+  EVALUATE C12 := 2.13382 2.603 * 100. / ;
+  EVALUATE C13 := 14.5808 2.603 * 100. / ;
+  EVALUATE C14 := 20.2969 2.603 * 100. / ;
+  EVALUATE C15 := 15.6173 2.603 * 100. / ;
+  EVALUATE C16 := 24.9461 2.603 * 100. / ;
+  EVALUATE C17 := 22.2318 2.603 * 100. / ;
+* Fuel externe 0-3 m (9.034 % Pu)
+  EVALUATE C21 :=  2.75  9.034 * 100. / ;
+  EVALUATE C22 := 51.96  9.034 * 100. / ;
+  EVALUATE C23 := 22.96  9.034 * 100. / ;
+  EVALUATE C24 := 15.23  9.034 * 100. / ;
+  EVALUATE C25 :=  7.1   9.034 * 100. / ; 
+* Conso externe 0-3 m (8.764 % Pu + 2.603 % Gd) 
+  EVALUATE C26 :=  2.75  8.764 * 100. /  ;
+  EVALUATE C27 := 51.96  8.764 * 100. /  ;
+  EVALUATE C28 := 22.96  8.764 * 100. /  ;
+  EVALUATE C29 := 15.23  8.764 * 100. /  ;
+  EVALUATE C30 :=  7.1   8.764 * 100. /  ;
+  EVALUATE C31 := 0.19322 2.603 * 100. / ;
+  EVALUATE C32 := 2.13382 2.603 * 100. / ;
+  EVALUATE C33 := 14.5808 2.603 * 100. / ;
+  EVALUATE C34 := 20.2969 2.603 * 100. / ;
+  EVALUATE C35 := 15.6173 2.603 * 100. / ;
+  EVALUATE C36 := 24.9461 2.603 * 100. / ;
+  EVALUATE C37 := 22.2318 2.603 * 100. / ;
+ELSEIF ITERATION 2 = THEN
+* Fuel interne 3-4 m (10.851 % Pu)
+  EVALUATE C01 :=  2.75 10.851 * 100. / ; 
+  EVALUATE C02 := 51.96 10.851 * 100. / ; 
+  EVALUATE C03 := 22.96 10.851 * 100. / ; 
+  EVALUATE C04 := 15.23 10.851 * 100. / ; 
+  EVALUATE C05 :=  7.1  10.851 * 100. / ;
+* conso interne 3-4 m (10.635 % Pu + 1.735 % Gd)
+  EVALUATE C06 :=  2.75 10.635 * 100. /  ;
+  EVALUATE C07 := 51.96 10.635 * 100. /  ;
+  EVALUATE C08 := 22.96 10.635 * 100. /  ;
+  EVALUATE C09 := 15.23 10.635 * 100. /  ;
+  EVALUATE C10 :=  7.1  10.635 * 100. /  ; 
+  EVALUATE C11 := 0.19322 1.735 * 100. / ;
+  EVALUATE C12 := 2.13382 1.735 * 100. / ;
+  EVALUATE C13 := 14.5808 1.735 * 100. / ;
+  EVALUATE C14 := 20.2969 1.735 * 100. / ;
+  EVALUATE C15 := 15.6173 1.735 * 100. / ;
+  EVALUATE C16 := 24.9461 1.735 * 100. / ;
+  EVALUATE C17 := 22.2318 1.735 * 100. / ;
+* Fuel externe 3-4 m (8.682 % Pu)
+  EVALUATE C21 :=  2.75  8.682 * 100. / ;
+  EVALUATE C22 := 51.96  8.682 * 100. / ;
+  EVALUATE C23 := 22.96  8.682 * 100. / ;
+  EVALUATE C24 := 15.23  8.682 * 100. / ;
+  EVALUATE C25 :=  7.1   8.682 * 100. / ;
+* Conso externe 3-4 m (8.508 % Pu + 1.735 % Gd)
+  EVALUATE C26 :=  2.75  8.508 * 100. /  ;
+  EVALUATE C27 := 51.96  8.508 * 100. /  ;
+  EVALUATE C28 := 22.96  8.508 * 100. /  ;
+  EVALUATE C29 := 15.23  8.508 * 100. /  ;
+  EVALUATE C30 :=  7.1   8.508 * 100. /  ;
+  EVALUATE C31 := 0.19322 1.735 * 100. / ;
+  EVALUATE C32 := 2.13382 1.735 * 100. / ;
+  EVALUATE C33 := 14.5808 1.735 * 100. / ;
+  EVALUATE C34 := 20.2969 1.735 * 100. / ;
+  EVALUATE C35 := 15.6173 1.735 * 100. / ;
+  EVALUATE C36 := 24.9461 1.735 * 100. / ;
+  EVALUATE C37 := 22.2318 1.735 * 100. / ;
+ELSE
+* Fuel interne 4-5 m (10.146 % Pu)
+  EVALUATE C01 :=  2.75 10.146 * 100. / ;
+  EVALUATE C02 := 51.96 10.146 * 100. / ;
+  EVALUATE C03 := 22.96 10.146 * 100. / ;
+  EVALUATE C04 := 15.23 10.146 * 100. / ;
+  EVALUATE C05 :=  7.1  10.146 * 100. / ;
+* conso interne 4-5 m (9.943 % Pu + 1.735 % Gd)
+  EVALUATE C06 :=  2.75  9.943 * 100. /  ; 
+  EVALUATE C07 := 51.96  9.943 * 100. /  ;
+  EVALUATE C08 := 22.96  9.943 * 100. /  ;
+  EVALUATE C09 := 15.23  9.943 * 100. /  ;
+  EVALUATE C10 :=  7.1   9.943 * 100. /  ;
+  EVALUATE C11 := 0.19322 1.735 * 100. / ;
+  EVALUATE C12 := 2.13382 1.735 * 100. / ;
+  EVALUATE C13 := 14.5808 1.735 * 100. / ;
+  EVALUATE C14 := 20.2969 1.735 * 100. / ;
+  EVALUATE C15 := 15.6173 1.735 * 100. / ;
+  EVALUATE C16 := 24.9461 1.735 * 100. / ;
+  EVALUATE C17 := 22.2318 1.735 * 100. / ;
+* Fuel externe 4-5 m (8.117 % Pu)
+  EVALUATE C21 :=  2.75  8.117 * 100. / ;
+  EVALUATE C22 := 51.96  8.117 * 100. / ;
+  EVALUATE C23 := 22.96  8.117 * 100. / ;
+  EVALUATE C24 := 15.23  8.117 * 100. / ;
+  EVALUATE C25 :=  7.1   8.117 * 100. / ;
+* Conso externe 4-5 m (7.955 % Pu + 1.735 % Gd)
+  EVALUATE C26 :=  2.75  7.955 * 100. /  ;
+  EVALUATE C27 := 51.96  7.955 * 100. /  ;
+  EVALUATE C28 := 22.96  7.955 * 100. /  ;
+  EVALUATE C29 := 15.23  7.955 * 100. /  ;
+  EVALUATE C30 :=  7.1   7.955 * 100. /  ;
+  EVALUATE C31 := 0.19322 1.735 * 100. / ;
+  EVALUATE C32 := 2.13382 1.735 * 100. / ;
+  EVALUATE C33 := 14.5808 1.735 * 100. / ;
+  EVALUATE C34 := 20.2969 1.735 * 100. / ;
+  EVALUATE C35 := 15.6173 1.735 * 100. / ;
+  EVALUATE C36 := 24.9461 1.735 * 100. / ;
+  EVALUATE C37 := 22.2318 1.735 * 100. / ;
+ENDIF ;
+*---------------------------------------------------------------
+* Recuperation du maillage
+*---------------------------------------------------------------
+
+IF     Maillage 281 = THEN 
+  EVALUATE NomBiblio := "L281b7r1"               ;
+ELSEIF Maillage 295 = THEN 
+  EVALUATE NomBiblio := "L295b7r1"               ;
+ELSEIF Maillage 361 = THEN 
+  EVALUATE NomBiblio := "L361b7r1"               ;
+ELSE 
+  EVALUATE NomBiblio := "L172b7r1"               ;
+ENDIF                                            ;
+*-----------------------------------------------------------------------
+* Recuperation composition isotopique (% massique) eau caloporteur et moderateur
+*-----------------------------------------------------------------------
+INFO: ::
+    EDIT 0
+    LIB: DRAGON FIL: <<NomBiblio>>
+    PUR: <<PureteCalo>> ATM%
+    ISO: 3 H1_H2O H2_D2O O16
+    CALC WGT% H2O >>WgtH1Calo<<   >>WgtD2Calo<<   >>Wgt016Calo<< ;
+ INFO: ::
+    EDIT 0
+    LIB: DRAGON FIL: <<NomBiblio>>
+    PUR: <<PureteMod>> ATM%
+    ISO: 3 H1_H2O H2_D2O O16
+    CALC WGT% D2O >>WgtH1Mod<<   >>WgtD2Mod<<   >>Wgt016Mod<< ;
+*---------------------------------------------------------------
+* Donnes DRAGLIB - ENDF/B-VII
+*---------------------------------------------------------------
+BiblioInt := LIB: ::
+    EDIT 0
+    NMIX 32 
+    CTRA APOL
+    MACR
+    DEPL    LIB: DRAGON    FIL: <<NomBiblio>>
+    MIXS    LIB: DRAGON    FIL: <<NomBiblio>>
+*---------------------------------------------------------------
+* DEFINITION DES MELANGES 
+* CALOPORTEUR VERS LE BAS (eau legere, 99.984 %ATM H20 et 0.0156 %ATM D20) 
+*---------------------------------------------------------------
+    MIX 1 <<TempCaloDw>> <<DensCaloDw>> NOEV
+      H1   = H1_H2O  <<WgtH1Calo>>
+      D2   = H2_D2O  <<WgtD2Calo>>
+      O16  = O16     <<Wgt016Calo>>
+*---------------------------------------------------------------
+* TUBE CENTRAL ECOULEMENT + LINER INT
+* (Acier inox 310 Zr90) (Si 0.51 et Zr 0.59 décomposés selon les pourcentages naturels)
+*---------------------------------------------------------------
+    MIX 2 <<TempLiner>> 7.90 NOEV
+      C    = C0         0.0340
+      Si28 = Si28       0.46852
+      Si29 = Si29       0.02465
+      Si30 = Si30       0.01683
+      P31  = P31        0.0160
+      S    = S32        0.0020  
+      Mn55 = Mn55       0.7400  
+      !Cr   = Cr        25.0400      
+      Cr50 = Cr50       1.04509 
+      Cr52 = Cr52      20.95832  
+      Cr53 = Cr53       2.42227  
+      Cr54 = Cr54       0.61432
+      !Fe   = Fe        51.738                      
+      Fe54 = Fe54       2.9209   
+      Fe56 = Fe56      47.5480   
+      Fe57 = Fe57       1.1177   
+      Fe58 = Fe58       0.15136    
+      !Ni   = Ni        20.8200
+      Ni58 = Ni58      13.9892
+      Ni60 = Ni60       5.5763
+      Ni61 = Ni61       0.24635
+      Ni62 = Ni62       0.79835
+      Ni64 = Ni64       0.20985
+      !Mo   = Mo         0.5100
+      Mo92 = Mo92       0.0710
+      Mo94 = Mo94       0.0456
+      Mo95 = Mo95       0.0799
+      Mo96 = Mo96       0.0850
+      Mo97 = Mo97       0.0494
+      Mo98 = Mo98       0.1269
+      Mo100 = Mo100     0.0521
+      !Zr    = Zr        0.59  
+      Zr90  = Zr90      0.2992      2
+      Zr91  = Zr91      0.06597     2
+      Zr92  = Zr92      0.10194     2
+      Zr94  = Zr94      0.10555     2
+      Zr96  = Zr96      0.01737     2
+*---------------------------------------------------------------
+* ISOLANT  
+*---------------------------------------------------------------  
+   MIX 3 <<TempIsol>>    5.37 NOEV
+     Zr90  = Zr90     33.7855      2
+     Zr91  = Zr91      7.4498      2
+     Zr92  = Zr92     11.5124      2
+     Zr94  = Zr94     11.92084     2
+     Zr96  = Zr96      1.96145     2
+     O16   = O16         25.50
+     Y89   = Y89          7.87
+*---------------------------------------------------------------
+* CALOPORTEUR HAUT  
+*---------------------------------------------------------------  
+   MIX 4 <<TempCaloUp>> <<DensCaloUp>> NOEV
+     H1   = H1_H2O  <<WgtH1Calo>>
+     D2   = H2_D2O  <<WgtD2Calo>>
+     O16  = O16     <<Wgt016Calo>>
+*---------------------------------------------------------------
+* ISOLANT encore
+*---------------------------------------------------------------  
+   MIX 5 COMB 3 1.0
+*---------------------------------------------------------------
+* LINER EXT + TUBE DE FORCE (Zr90O2) 
+*---------------------------------------------------------------  
+   MIX 6 <<TempTubFrc>> 6.52 NOEV
+     Sn112 = Sn112       0.0320
+     Sn114 = Sn114       0.0222
+     Sn115 = Sn115       0.0115
+     Sn116 = Sn116       0.4967
+     Sn117 = Sn117       0.2647
+     Sn118 = Sn118       0.8419
+     Sn119 = Sn119       0.3011
+     Sn120 = Sn120       1.15175
+     Sn122 = Sn122       0.1664
+     Sn124 = Sn124       0.2115  
+     Mo92  = Mo92        0.1113
+     Mo94  = Mo94        0.0716
+     Mo95  = Mo95        0.1253
+     Mo96  = Mo96        0.1333
+     Mo97  = Mo97        0.0776
+     Mo98  = Mo98        0.1991
+     Mo100 = Mo100       0.0818  
+     Nb    = Nb93        0.8000
+     Zr90  = Zr90       48.1201     2
+     Zr91  = Zr91       10.6107     2 
+     Zr92  = Zr92       16.3969     2
+     Zr94  = Zr94       16.97866    2
+     Zr96  = Zr96        2.79366    2
+*---------------------------------------------------------------
+* MODERATEUR (Eau lourde : 99.833 %ATM D20 0.167 %ATM H20) 
+*---------------------------------------------------------------  
+     MIX 7 <<TempMod>> <<DensMod>> NOEV 
+      H1   = H1_H2O  <<WgtH1Mod>>
+      D2   = H2_D2O  <<WgtD2Mod>>
+      O16  = O16     <<Wgt016Mod>>
+      MB10 = B10     <<CB10pct>>
+      MB11 = B11     <<CB11pct>>
+*---------------------------------------------------------------
+* GAINE (Acier inoxydable 310) 
+*---------------------------------------------------------------  
+      MIX 8 <<TempGaine>> 7.90 NOEV
+      C    = C0         0.0340
+      Si28 = Si28       0.46852
+      Si29 = Si29       0.02465
+      Si30 = Si30       0.01683
+      P31  = P31        0.0160
+      S    = S32        0.0020  
+      Mn55 = Mn55       0.7400  
+      !Cr   = Cr        25.0400      
+      Cr50 = Cr50       1.04509 
+      Cr52 = Cr52      20.95832  
+      Cr53 = Cr53       2.42227  
+      Cr54 = Cr54       0.61432
+      !Fe   = Fe        51.738                      
+      Fe54 = Fe54       2.9209   
+      Fe56 = Fe56      47.5480   
+      Fe57 = Fe57       1.1177   
+      Fe58 = Fe58       0.15136    
+      !Ni   = Ni        20.8200
+      Ni58 = Ni58      13.9892
+      Ni60 = Ni60       5.5763
+      Ni61 = Ni61       0.24635
+      Ni62 = Ni62       0.79835
+      Ni64 = Ni64       0.20985
+      !Mo   = Mo         0.5100
+      Mo92 = Mo92       0.0710
+      Mo94 = Mo94       0.0456
+      Mo95 = Mo95       0.0799
+      Mo96 = Mo96       0.0850
+      Mo97 = Mo97       0.0494
+      Mo98 = Mo98       0.1269
+      Mo100 = Mo100     0.0521
+      !Zr    = Zr        0.59  
+      Zr90  = Zr90      0.2992      2
+      Zr91  = Zr91      0.06597     2
+      Zr92  = Zr92      0.10194     2
+      Zr94  = Zr94      0.10555     2
+      Zr96  = Zr96      0.01737     2
+*---------------------------------------------------------------
+* COMBUSTIBLE INTERNE  
+*--------------------------------------------------------------- 
+     MIX 9 <<TempFuel>> 9.91
+      Xe135   1.0E-24  
+      Sm149   1.0E-24  
+      Np239   1.0E-24 
+      Pu238   <<C01>>       1
+      Pu239   <<C02>>       1
+      Pu240   <<C03>>       1
+      Pu241   <<C04>>       1
+      Pu242   <<C05>>       1
+      Th232    76.632       1
+      Pa233     1.0E-24     1  
+      U233      1.0E-24     1         
+      O16      12.075
+     MIX 10 COMB 9 1.0
+     MIX 11 COMB 9 1.0
+     MIX 12 COMB 9 1.0
+     MIX 13 COMB 9 1.0
+     MIX 14 COMB 9 1.0
+*---------------------------------------------------------------
+* COMSOMMABLE INTERNE 
+*---------------------------------------------------------------
+     MIX 15 <<TempFuel>> 9.82
+      Xe135    0.  
+      Sm149    0.  
+      Np239    0. 
+      Pu238   <<C06>>       1
+      Pu239   <<C07>>       1
+      Pu240   <<C08>>       1
+      Pu241   <<C09>>       1
+      Pu242   <<C10>>       1
+      Th232   74.333        1
+      Pa233   1.0E-24     1        
+      U233    1.0E-24     1           
+      O16    12.11
+      Gd152   <<C11>>   3
+      Gd154   <<C12>>   3
+      Gd155   <<C13>>   3
+      Gd156   <<C14>>   3
+      Gd157   <<C15>>   3
+      Gd158   <<C16>>   3
+      Gd160   <<C17>>   3
+     MIX 16 COMB 15 1.0
+     MIX 17 COMB 15 1.0
+     MIX 18 COMB 15 1.0
+     MIX 19 COMB 15 1.0
+     MIX 20 COMB 15 1.0
+*---------------------------------------------------------------
+* COMBUSTIBLE EXTERNE 
+*--------------------------------------------------------------- 
+     MIX 21 <<TempFuel>> 9.87
+      Xe135   1.0E-24  
+      Sm149   1.0E-24  
+      Np239   1.0E-24 
+      Pu238   <<C21>>       1
+      Pu239   <<C22>>       1
+      Pu240   <<C23>>       1
+      Pu241   <<C24>>       1
+      Pu242   <<C25>>       1
+      Th232    78.882       1
+      Pa233    1.0E-24     1       
+      U233     1.0E-24     1       
+      O16      12.084
+     MIX 22 COMB 21 1.0
+     MIX 23 COMB 21 1.0
+     MIX 24 COMB 21 1.0
+     MIX 25 COMB 21 1.0
+     MIX 26 COMB 21 1.0
+*---------------------------------------------------------------
+* COMSOMMABLE EXTERNE 
+*---------------------------------------------------------------
+     MIX 27 <<TempFuel>> 9.79
+      Xe135 = Xe135    0.  
+      Sm149 = Sm149    0.  
+      Np239 = Np239    0. 
+      Pu238 = Pu238   <<C26>>       1
+      Pu239 = Pu239   <<C27>>       1
+      Pu240 = Pu240   <<C28>>       1
+      Pu241 = Pu241   <<C29>>       1
+      Pu242 = Pu242   <<C30>>       1
+      Th232 = Th232   76.515        1
+      Pa233 = Pa233   1.0E-24     1          
+      U233  = U233    1.0E-24     1         
+      O16   = O16    12.118
+      Gd152 = Gd152   <<C31>>   3
+      Gd154 = Gd154   <<C32>>   3
+      Gd155 = Gd155   <<C33>>   3
+      Gd156 = Gd156   <<C34>>   3
+      Gd157 = Gd157   <<C35>>   3
+      Gd158 = Gd158   <<C36>>   3
+      Gd160 = Gd160   <<C37>>   3
+     MIX 28 COMB 27 1.0
+     MIX 29 COMB 27 1.0
+     MIX 30 COMB 27 1.0
+     MIX 31 COMB 27 1.0
+     MIX 32 COMB 27 1.0
+      ;
+
+END: ;
+QUIT "LIST" .  

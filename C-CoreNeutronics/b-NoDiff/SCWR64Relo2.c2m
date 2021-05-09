@@ -1,0 +1,268 @@
+*--------------------
+* Nom          : SCWR64Reload.c2m
+* Utilisation  : Rechargement reacteur
+* Auteur       : U. Le Tennier 
+* Date         : 05/12/2019
+* Modifier     : /
+*
+*---------------------------
+* Descritpion de la procedure
+*
+* Rechargement du coeur CANDU-SCWR selon le nombre de cycles et le burnup cible
+*
+* FuelMap := SCWR64Relo2 FuelMap :: 
+*    <<TempMod>> <<DensMod>> <<ConcBore>>
+*    <<NameCycl>> <<NamePreCycl>>        ;                   
+*
+*-------------------------------------------------------------------------
+* Definition des structures de donnees a echanger
+*-------------------------------------------------------------------------
+PARAMETER FuelMap :: 
+          ::: LINKED_LIST FuelMap                      ; ;
+MODULE SIM: END:                                       ;
+
+*-------------------------------------------------------------------------
+* Recuperation des donnees d entree
+*-------------------------------------------------------------------------
+
+REAL   TempMod     DensMod                                       ;
+::   >>TempMod<< >>DensMod<<                                     ;
+REAL   ConcBore                                                  ;
+::   >>ConcBore<<                                                ;
+STRING NameCycl     NamePreCycl     LoadModel                    ;
+::   >>NameCycl<< >>NamePreCycl<< >>LoadModel<<                  ;
+
+
+
+*-------------------------------------------------------------------------
+* Rechargement du coeur 
+*-------------------------------------------------------------------------
+
+IF LoadModel "3c" = THEN
+
+  FuelMap := SIM: FuelMap ::
+   EDIT 0
+   CYCLE <<NameCycl>> FROM <<NamePreCycl>>
+
+  MAP
+    A   B   C   D   E   F   G   H   I   J    
+           K   L   M   N   O   P   Q   R   S   T      
+
+01  |   |   |   |   |   |  J04 NEW H02 I03   
+   L03 M02 NEW K04  |   |   |   |   |   |     
+
+02  |   |   |   |  G05 NEW J08 I07 G01 NEW   
+   NEW N01 L07 K08 NEW N05  |   |   |   | 
+
+03  |   |  H08 H01 NEW J09 NEW D03 NEW G06   
+   N06 NEW Q03 NEW K09 NEW M01 M08  |   | 
+
+04  |   |  A08 NEW J06 NEW I06 F04 H05 NEW   
+   NEW M05 O04 L06 NEW K06 NEW T08  |   |
+
+05  |  E07 NEW F10 C03 G03 NEW I05 NEW J01   
+   K01 NEW L05 NEW N03 R03 O10 NEW P07  | 
+
+06  |  NEW I10 NEW C07 F03 F02 NEW J02 E03   
+   P03 K02 NEW O02 O03 R07 NEW L10 NEW  |
+
+07 D10 H10 NEW F09 NEW B06 D04 F05 NEW E02   
+   P02 NEW O05 Q04 S06 NEW O09 NEW M10 Q10 
+
+08 NEW G09 C04 D06 E09 NEW E06 NEW H04 H06   
+   M06 M04 NEW P06 NEW P09 Q06 R04 N09 NEW  
+
+09 B08 A07 NEW E08 NEW B10 NEW D08 C06 NEW    
+  NEW R06 Q08 NEW S10 NEW P08 NEW T07 S08 
+
+10 C09 NEW F07 NEW A10 C05 B05 F08 NEW G07    
+  N07 NEW O08 S05 R05 T10 NEW O07 NEW R09 
+
+* //
+
+11 C12 NEW F14 NEW A11 C16 B16 F13 NEW G14    
+   N14 NEW O13 S16 R16 T11 NEW O14 NEW R12  
+
+12 B13 A14 NEW E13 NEW B11 NEW D13 C15 NEW    
+   NEW R15 Q13 NEW S11 NEW P13 NEW T14 S13 
+
+13 NEW G12 C17 D15 E12 NEW E15 NEW H17 H15    
+   M15 M17 NEW P15 NEW P12 Q15 R17 N12 NEW 
+
+14 D11 H11 NEW F12 NEW B15 D17 F16 NEW E19    
+   P19 NEW O16 Q17 S15 NEW O12 NEW M11 Q11 
+
+15  |  NEW I11 NEW C14 F18 F19 NEW J19 E18    
+   P18 K19 NEW O19 O18 R14 NEW L11 NEW  |
+
+16  |  E14 NEW F11 C18 G18 NEW I16 NEW J20    
+   K20 NEW L16 NEW N18 R18 O11 NEW P14  | 
+
+17  |   |  A13 NEW J15 NEW I15 F17 H16 NEW    
+   NEW M16 O17 L15 NEW K15 NEW T13  |   |
+
+18  |   |  H13 H20 NEW J12 NEW D18 NEW G15    
+   N15 NEW Q18 NEW K12 NEW M20 M13  |   |     
+
+19  |   |   |   |  G16 NEW J13 I14 G20 NEW    
+   NEW N20 L14 K13 NEW N16  |   |   |   | 
+
+20  |   |   |   |   |   |  J17 NEW H19 I18     
+   L18 M19 NEW K17  |   |   |   |   |   | 
+
+
+
+
+
+ ENDCYCLE 
+ ;
+
+
+ELSEIF LoadModel "4c" = THEN 
+
+  FuelMap := SIM: FuelMap ::
+   EDIT 0
+   CYCLE <<NameCycl>> FROM <<NamePreCycl>>
+
+  MAP
+    A   B   C   D   E   F   G   H   I   J       
+    K   L   M   N   O   P   Q   R   S   T      
+
+01  |   |   |   |   |   |  H01 NEW I04 I02       
+   L02 L04 NEW M01  |   |   |   |   |   |     
+
+02  |   |   |   |  F03 G01 F02 H03 NEW J01       
+   K01 NEW M03 O02 N01 O03  |   |   |   |   
+
+03  |   |  NEW G04 E02 NEW E04 H05 J02 NEW       
+   NEW K02 M05 P04 NEW P02 N04 NEW  |   |
+
+04  |   |  D07 D03 F05 E03 NEW G06 J05 G03       
+   N03 K05 N06 NEW P03 O05 Q03 Q07  |   |
+
+05  |  C06 B05 E06 C04 NEW H02 NEW H04 NEW       
+   NEW M04 NEW M02 NEW R04 P06 S05 R06  | 
+
+06  |  A07 NEW C05 NEW D04 H07 I06 J03 I01       
+   L01 K03 L06 M07 Q04 NEW R05 NEW T07  |
+
+07 A08 B06 D05 NEW B08 G08 E05 NEW H06 J08       
+   K08 M06 NEW P05 N08 S08 NEW Q05 S06 T08
+
+08 NEW C08 E08 F07 NEW F09 NEW J10 J07 NEW       
+   NEW K07 K10 NEW O09 NEW O07 P08 R08 NEW
+
+09 D09 NEW B10 E10 D08 C10 F08 G10 C03 I08       
+   L08 R03 N10 O08 R10 Q08 P10 S10 NEW Q09
+
+10 B09 A10 NEW C07 NEW A09 H10 NEW H09 I09       
+   L09 M09 NEW M10 T09 NEW R07 NEW T10 S09
+
+* //
+11 B12 A11 NEW C14 NEW A12 H11 NEW H12 I12       
+   L12 M12 NEW M11 T12 NEW R14 NEW T11 S12
+
+12 D12 NEW B11 E11 D13 C11 F13 G11 C18 I13       
+   L13 R18 N11 O13 R11 Q13 P11 S11 NEW Q12
+
+13 NEW C13 E13 F14 NEW F12 NEW J11 J14 NEW       
+   NEW K14 K11 NEW O12 NEW O14 P13 R13 NEW
+
+14 A13 B15 D16 NEW B13 G13 E16 NEW H15 J13       
+   K13 M15 NEW P16 N13 S13 NEW Q16 S15 T13
+
+15  |  A14 NEW C16 NEW D17 H14 I15 J18 I20       
+   L20 K18 L15 M14 Q17 NEW R16 NEW T14  |
+
+16  |  C15 B16 E15 C17 NEW H19 NEW H17 NEW       
+   NEW M17 NEW M19 NEW R17 P15 S16 R15  | 
+
+17  |   |  D14 D18 F16 E18 NEW G15 J16 G18       
+   N18 K16 N15 NEW P18 O16 Q18 Q14  |   |  
+
+18  |   |  NEW G17 E19 NEW E17 H16 J19 NEW       
+   NEW K19 M16 P17 NEW P19 N17 NEW  |   |   
+
+19  |   |   |   |  F18 G20 F19 H18 NEW J20       
+   K20 NEW M18 O19 N20 O18  |   |   |   |
+
+20  |   |   |   |   |   |  H20 NEW I17 I19       
+   L19 L17 NEW M20  |   |   |   |   |   | 
+
+
+ ENDCYCLE 
+
+ENDIF                                    ;
+
+
+END: ;
+QUIT "LIST" .
+
+
+RELOADING OLDMAP 3C
+
+  MAP
+     A   B   C   D   E   F   G   H   I   J    
+     K   L   M   N   O   P   Q   R   S   T      
+
+01  |   |   |   |   |   |  I07 NEW H10 NEW    
+   NEW M10 NEW L07  |   |   |   |   |   |     
+
+02  |   |   |   |  NEW J03 NEW J09 NEW J04    
+   K04 NEW K09 NEW K03 NEW  |   |   |   |   
+
+03  |   |  NEW I08 H07 NEW G01 NEW F04 NEW    
+   NEW O04 NEW N01 NEW M07 L08 NEW  |   |
+
+04  |   |  H09 NEW I02 J01 J06 E04 H05 H03    
+   M03 M05 P04 K06 K01 L02 NEW M09  |   |
+
+05  |  NEW G08 B09 J10 NEW G06 NEW F03 I04    
+   L04 O03 NEW N06 NEW K10 S09 N08 NEW  | 
+
+06  |  C10 NEW A10 NEW F02 NEW G04 G05 NEW    
+   NEW N05 N04 NEW O02 NEW T10 NEW R10  |
+
+07 G09 NEW A07 F10 F07 NEW B06 F05 NEW I05    
+   L05 NEW O05 S06 NEW O07 O10 T07 NEW N09
+
+08 NEW I10 NEW D05 NEW D07 E06 C03 G02 H01    
+   M01 N02 R03 P06 Q07 NEW Q05 NEW L10 NEW
+
+09 J08 NEW D06 E08 C06 E07 NEW B07 H08 E02    
+   P02 M08 S07 NEW P07 R06 P08 Q06 NEW K08
+
+10 NEW D10 NEW C08 D09 NEW E09 A08 B05 D04    
+   Q04 S05 T08 P09 NEW Q09 R08 NEW Q10 NEW
+
+* //
+
+11 NEW D11 NEW C13 D12 NEW E12 A13 B16 D17    
+   Q17 S16 T13 P12 NEW Q12 R13 NEW Q11 NEW
+
+12 J13 NEW D15 E13 C15 E14 NEW B14 H13 E19    
+   P19 M13 S14 NEW P14 R15 P13 Q15 NEW K13 
+
+13 NEW I11 NEW D16 NEW D14 E15 C18 G19 H20    
+   M20 N19 R18 P15 Q14 NEW Q16 NEW L11 NEW
+
+14 G12 NEW A14 F11 F14 NEW B15 F16 NEW I16    
+   L16 NEW O16 S15 NEW O14 O11 T14 NEW N12
+
+15  |  C11 NEW A11 NEW F19 NEW G17 G16 NEW    
+   NEW N16 N17 NEW O19 NEW T11 NEW R11  |
+
+16  |  NEW G13 B12 J11 NEW G15 NEW F18 I17    
+   L17 O18 NEW N15 NEW K11 S12 N13 NEW  |
+
+17  |   |  H12 NEW I19 J20 J15 E17 H16 H18    
+   M18 M16 P17 K15 K20 L19 NEW M12  |   |
+
+18  |   |  NEW I13 H14 NEW G20 NEW F17 NEW    
+   NEW O17 NEW N20 NEW M14 L13 NEW  |   |
+
+19  |   |   |   |  NEW J18 NEW J12 NEW J17    
+   K17 NEW K12 NEW K18 NEW  |   |   |   |
+
+20  |   |   |   |   |   |  I14 NEW H11 NEW    
+   NEW M11 NEW L14  |   |   |   |   |   |

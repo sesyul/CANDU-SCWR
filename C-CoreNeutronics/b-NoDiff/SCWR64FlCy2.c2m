@@ -1,0 +1,308 @@
+*--------------------
+* Nom          : SCWR64FlCy.c2m
+* Utilisation  : Initialisation de la fuelmap pour un cycle
+* Auteur       : U. Le Tennier 
+* Date         : 03/06/2019
+* Modifier     : /
+*
+*---------------------------
+* Preparation de la fuelmap pour un cycle, pour CANDU-SCWR 64 
+* 3 ou 4 burnups par cycle
+* Mise à jour des paramètres globaux 
+*
+* FuelMap := SCWR64FlCy2  :: 
+*    <<FuB1>>    <<FuB2>>    <<FuB3>>    
+*    <<TempMod>> <<DensMod>> <<ConcBore>>
+*    <<NameCycl>> <<LoadModel>>                      ;
+*                            
+*-------------------------------------------------------------------------
+* Rappel des zones de burn 
+*-------------------------------------------------------------------------
+*    B-ZONE
+*
+*                   1  2  3  4   4  3  2  1 
+*             5  6  7  8  9 10   10 9  8  7  6  5
+*      11 12 13 14 15 16 17 18   18 17 16 15 14 13 12 11
+*      19 20 21 22 23 24 25 26   26 25 24 23 22 21 20 19
+*   27 28 29 30 31 32 33 34 35   35 34 33 32 31 30 29 28 27 
+*   36 37 38 39 40 41 42 43 44   44 43 42 41 40 39 38 37 36
+*45 46 47 48 49 50 51 52 53 54   54 53 52 51 50 49 48 47 46 45
+*55 56 57 58 59 60 61 62 63 64   64 63 62 61 60 59 58 57 56 55
+*65 66 67 68 69 70 71 72 73 74   74 73 72 71 70 69 68 67 66 65 
+*75 76 77 78 79 80 81 82 83 84   84 83 82 81 80 79 78 77 76 75 
+* 
+*75 76 77 78 79 80 81 82 83 84   84 83 82 81 80 79 78 77 76 75 
+*65 66 67 68 69 70 71 72 73 74   74 73 72 71 70 69 68 67 66 65
+*55 56 57 58 59 60 61 62 63 64   64 63 62 61 60 59 58 57 56 55
+*45 46 47 48 49 50 51 52 53 54   54 53 52 51 50 49 48 47 46 45 
+*   36 37 38 39 40 41 42 43 44   44 43 42 41 40 39 38 37 36
+*   27 28 29 30 31 32 33 34 35   35 34 33 32 31 30 29 28 27
+*      19 20 21 22 23 24 25 26   26 25 24 23 22 21 20 19
+*      11 12 13 14 15 16 17 18   18 17 16 15 14 13 12 11
+*             5  6  7  8  9 10   10 9  8  7  6  5
+*                   1  2  3  4   4  3  2  1 
+*
+*-------------------------------------------------------------------------
+* Definition des structures de donnees a echanger
+*-------------------------------------------------------------------------
+PARAMETER FuelMap :: 
+          ::: LINKED_LIST FuelMap ; ;
+MODULE SIM: END:                  ;
+ 
+*-------------------------------------------------------------------------
+* Recuperation des donnes d entree
+*-------------------------------------------------------------------------
+
+REAL   FuB1     FuB2     FuB3                                    ;  
+::   >>FuB1<< >>FuB2<< >>FuB3<<                                  ;
+REAL TempMod     DensMod      ConcBore                 ;
+::   >>TempMod<< >>DensMod<<  >>ConcBore<<               ;
+STRING NameCycl     LoadModel                                    ;
+::   >>NameCycl<< >>LoadModel<<                                  ;
+
+IF LoadModel "3c" = THEN 
+
+FuelMap := SIM: FuelMap ::
+ EDIT 0
+ CYCLE <<NameCycl>> 
+ MAP
+    A   B   C   D   E   F   G   H   I   J      
+     K   L   M   N   O   P   Q   R   S   T  
+01  |   |   |   |   |   |  SPC NEW SPC SPC    
+SPC SPC NEW SPC  |   |   |   |   |   |
+02  |   |   |   |  SPC NEW SPC SPC SPC NEW    
+NEW SPC SPC SPC NEW SPC  |   |   |   | 
+03  |   |  SPC SPC NEW SPC NEW SPC NEW SPC    
+SPC NEW SPC NEW SPC NEW SPC SPC  |   |
+04  |   |  SPC NEW SPC NEW SPC SPC SPC NEW    
+NEW SPC SPC SPC NEW SPC NEW SPC  |   |
+05  |  SPC NEW SPC SPC SPC NEW SPC NEW SPC    
+SPC NEW SPC NEW SPC SPC SPC NEW SPC  | 
+06  |  NEW SPC NEW SPC SPC SPC NEW SPC SPC    
+SPC SPC NEW SPC SPC SPC NEW SPC NEW  |
+07 SPC SPC NEW SPC NEW SPC SPC SPC NEW SPC    
+SPC NEW SPC SPC SPC NEW SPC NEW SPC SPC
+08 NEW SPC SPC SPC SPC NEW SPC NEW SPC SPC    
+SPC SPC NEW SPC NEW SPC SPC SPC SPC NEW 
+09 SPC SPC NEW SPC NEW SPC NEW SPC SPC NEW    
+NEW SPC SPC NEW SPC NEW SPC NEW SPC SPC 
+10 SPC NEW SPC NEW SPC SPC SPC SPC NEW SPC    
+SPC NEW SPC SPC SPC SPC NEW SPC NEW SPC
+* // 
+11 SPC NEW SPC NEW SPC SPC SPC SPC NEW SPC    
+SPC NEW SPC SPC SPC SPC NEW SPC NEW SPC
+12 SPC SPC NEW SPC NEW SPC NEW SPC SPC NEW    
+NEW SPC SPC NEW SPC NEW SPC NEW SPC SPC  
+13 NEW SPC SPC SPC SPC NEW SPC NEW SPC SPC    
+SPC SPC NEW SPC NEW SPC SPC SPC SPC NEW 
+14 SPC SPC NEW SPC NEW SPC SPC SPC NEW SPC    
+SPC NEW SPC SPC SPC NEW SPC NEW SPC SPC 
+15  |  NEW SPC NEW SPC SPC SPC NEW SPC SPC    
+SPC SPC NEW SPC SPC SPC NEW SPC NEW  |
+16  |  SPC NEW SPC SPC SPC NEW SPC NEW SPC    
+SPC NEW SPC NEW SPC SPC SPC NEW SPC  |
+17  |   |  SPC NEW SPC NEW SPC SPC SPC NEW    
+NEW SPC SPC SPC NEW SPC NEW SPC  |   | 
+18  |   |  SPC SPC NEW SPC NEW SPC NEW SPC    
+SPC NEW SPC NEW SPC NEW SPC SPC  |   |
+19  |   |   |   |  SPC NEW SPC SPC SPC NEW    
+NEW SPC SPC SPC NEW SPC  |   |   |   | 
+20  |   |   |   |   |   |  SPC NEW SPC SPC    
+SPC SPC NEW SPC  |   |   |   |   |   | 
+
+
+SPEC     
+* FuB1 
+G01 N01 G20 N20
+J01 K01 J20 K20 
+E02 P02 E19 P19 
+H02 M02 H19 M19 
+C03 R03 C18 R18
+D03 Q03 D18 Q18
+F03 O03 F18 O18 SET AVGB <<FuB1>>
+C04 R04 C17 R17
+H04 M04 H17 M17
+B05 S05 B16 S16
+F05 O05 F16 O16
+H05 M05 H16 M16
+C06 R06 C15 R15
+E06 P06 E15 P15 SET AVGB <<FuB1>>
+G06 N06 G15 N15
+I06 L06 I15 L15
+J06 K06 J15 K15
+A07 T07 A14 T14
+F07 O07 F14 O14
+G07 N07 G14 N14
+B08 S08 B13 S13 SET AVGB <<FuB1>>
+D08 Q08 D13 Q13
+E08 P08 E13 P13
+J08 K08 J13 K13
+F09 O09 F12 O12
+A10 T10 A11 T11
+F10 O10 F11 O11
+H10 M10 H11 M11 SET AVGB <<FuB1>>
+
+G01 N01 G20 N20
+G02 N02 G19 N19
+I02 L02 I19 L19
+H03 M03 H18 M18
+J03 K03 J18 K18
+E04 P04 E17 P17
+G04 N04 G17 N17  SET AVGB <<FuB2>>
+I04 L04 I17 L17
+D05 Q05 D16 Q16
+E05 P05 E16 P16
+J05 K05 J16 K16
+F06 O06 F15 O15
+B07 S07 B14 S14
+D07 Q07 D14 Q14  SET AVGB <<FuB2>>
+H07 M07 H14 M14
+J07 K07 J14 K14
+C08 R08 C13 R13
+G08 N08 G13 N13
+I08 L08 I13 L13
+A09 T09 A12 T12
+B09 S09 B12 S12  SET AVGB <<FuB2>>
+D09 Q09 D12 Q12
+H09 M09 H12 M12
+I09 L09 I12 L12
+C10 R10 C11 R11
+E10 P10 E11 P11
+G10 N10 G11 N11
+J10 K10 J11 K11 SET AVGB <<FuB2>>
+
+ ENDCYCLE 
+
+  SET-PARAM 'Mod Dens    ' <<DensMod>>    
+  SET-PARAM 'Bore ppm    ' <<ConcBore>>  
+  SET-PARAM 'Mod Temp    ' <<TempMod>>
+  ;
+         
+ELSEIF LoadModel "4c" = THEN
+
+FuelMap := SIM: FuelMap ::
+ EDIT 0
+ CYCLE <<NameCycl>> 
+ MAP
+    A   B   C   D   E   F   G   H   I   J     
+      K   L   M   N   O   P   Q   R   S   T  
+01  |   |   |   |   |   |  SPC NEW SPC SPC     
+SPC SPC NEW SPC  |   |   |   |   |   |
+02  |   |   |   |  SPC SPC SPC SPC NEW SPC     
+SPC NEW SPC SPC SPC SPC  |   |   |   | 
+03  |   |  NEW SPC SPC NEW SPC SPC SPC NEW     
+NEW SPC SPC SPC NEW SPC SPC NEW  |   |
+04  |   |  SPC SPC SPC SPC NEW SPC SPC SPC     
+SPC SPC SPC NEW SPC SPC SPC SPC  |   |
+05  |  SPC SPC SPC SPC NEW SPC NEW SPC NEW     
+NEW SPC NEW SPC NEW SPC SPC SPC SPC  | 
+06  |  SPC NEW SPC NEW SPC SPC SPC SPC SPC     
+SPC SPC SPC SPC SPC NEW SPC NEW SPC  |
+07 SPC SPC SPC NEW SPC SPC SPC NEW SPC SPC     
+SPC SPC NEW SPC SPC SPC NEW SPC SPC SPC
+08 NEW SPC SPC SPC NEW SPC NEW SPC SPC NEW     
+NEW SPC SPC NEW SPC NEW SPC SPC SPC NEW 
+09 SPC NEW SPC SPC SPC SPC SPC SPC SPC SPC     
+SPC SPC SPC SPC SPC SPC SPC SPC NEW SPC 
+10 SPC SPC NEW SPC NEW SPC SPC NEW SPC SPC     
+SPC SPC NEW SPC SPC NEW SPC NEW SPC SPC
+* // 
+11 SPC SPC NEW SPC NEW SPC SPC NEW SPC SPC     
+   SPC SPC NEW SPC SPC NEW SPC NEW SPC SPC
+12 SPC NEW SPC SPC SPC SPC SPC SPC SPC SPC  
+   SPC SPC SPC SPC SPC SPC SPC SPC NEW SPC  
+13 NEW SPC SPC SPC NEW SPC NEW SPC SPC NEW  
+   NEW SPC SPC NEW SPC NEW SPC SPC SPC NEW
+14 SPC SPC SPC NEW SPC SPC SPC NEW SPC SPC  
+   SPC SPC NEW SPC SPC SPC NEW SPC SPC SPC
+15  |  SPC NEW SPC NEW SPC SPC SPC SPC SPC  
+   SPC SPC SPC SPC SPC NEW SPC NEW SPC  |
+16  |  NEW SPC SPC SPC NEW SPC NEW SPC NEW  
+   NEW SPC NEW SPC NEW SPC SPC SPC SPC  | 
+17  |   |  SPC SPC SPC SPC NEW SPC SPC SPC  
+   SPC SPC SPC NEW SPC SPC SPC SPC  |   | 
+18  |   |  NEW SPC SPC NEW SPC SPC SPC NEW  
+   NEW SPC SPC SPC NEW SPC SPC NEW  |   |
+19  |   |   |   |  SPC SPC SPC SPC NEW SPC  
+   SPC NEW SPC SPC SPC SPC  |   |   |   | 
+20  |   |   |   |   |   |  SPC NEW SPC SPC  
+   SPC SPC NEW SPC  |   |   |   |   |   | 
+
+
+SPEC      
+  G01 G20 N01 N20
+  J01 J20 K01 K20  
+  E02 E19 P02 P19 
+  D03 D18 Q03 Q18 
+  H03 H18 M03 M18 
+  C04 C17 R04 R17
+  E04 E17 P04 P17 SET AVGB <<FuB1>>
+  I04 I17 L04 L17 
+  B05 B16 S05 S16 
+  D05 D16 Q05 Q16
+  G06 G15 N06 N15 
+  I06 I15 L06 L15
+  A07 A14 T07 T14 
+  F07 F14 O07 O14 SET AVGB <<FuB1>>
+  J07 J14 K07 K14
+  C08 C13 R08 R13
+  D09 D12 Q09 Q12    
+  F09 F12 O09 O12
+  I09 I12 L09 L12 
+  A10 A11 T10 T11
+  G10 G11 N10 N11 SET AVGB <<FuB1>>
+
+  I01 I20 L01 L20 
+  F02 F19 O02 O19  
+  H02 H19 M02 M19 
+  J02 J19 K02 K19
+  E03 E18 P03 P18
+  G03 G18 N03 N18
+  D04 D17 Q04 Q17 SET AVGB <<FuB2>>
+  H04 H17 M04 M17   
+  C05 C16 R05 R16   
+  E05 E16 P05 P16 
+  B06 B15 S06 S15   
+  H06 H15 M06 M15
+  C07 C14 R07 R14    
+  B08 B13 S08 S13 SET AVGB <<FuB2>> 
+  D08 D13 Q08 Q13   
+  F08 F13 O08 O13  
+  I08 I13 L08 L13
+  A09 A12 T09 T12 
+  H09 H12 M09 M12   
+  B10 B11 S10 S11 
+  J10 J11 K10 K11 SET AVGB <<FuB2>>
+  
+  G02 G19 N02 N19 
+  I03 I18 L03 L18
+  F04 F17 O04 O17 
+  J04 J17 K04 K17
+  G05 G16 N05 N16 
+  I05 I16 L05 L16 
+  D06 D15 Q06 Q15 SET AVGB <<FuB3>>   
+  F06 F15 O06 O15
+  J06 J15 K06 K15 
+  B07 B14 S07 S14
+  E07 E14 P07 P14    
+  G07 G14 N07 N14
+  I07 I14 L07 L14 
+  H08 H13 M08 M13 SET AVGB <<FuB3>>     
+  C09 C12 R09 R12
+  E09 E12 P09 P12
+  G09 G12 N09 N12
+  J09 J12 K09 K12 
+  D10 D11 Q10 Q11 
+  F10 F11 O10 O11 
+  I10 I11 L10 L11 SET AVGB <<FuB3>>   
+ ENDCYCLE 
+
+  SET-PARAM 'Mod Dens    ' <<DensMod>>    
+  SET-PARAM 'Bore ppm    ' <<ConcBore>>  
+  SET-PARAM 'Mod Temp    ' <<TempMod>>
+  ;
+
+ENDIF                            ;
+
+END: ;
+QUIT "LIST" .

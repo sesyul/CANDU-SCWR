@@ -1,0 +1,425 @@
+*--------------------
+* Nom          : SCWR64Core.x2m
+* Utilisation  : Calcul coeur pour CANDU-SCWR 64 
+* Auteur       : U. Le Tennier 
+* Date         : 03/06/2019
+* Modifier     : /
+*
+*---------------------------
+* Calcul coeur CANDU-SCWR 64
+* 3 ou 4 burnups par rechargement 
+*
+*-------------------------------------------------------------------------
+* Definition des structures de donnees 
+*-------------------------------------------------------------------------
+PROCEDURE SCWR64Geo3 SCWR64FlIn3 SCWR64Relo3 
+          SCWR64FlCy3 SCWR64Crit3                    ;
+MODULE TRIVAT: GREP: DELETE: END: UTL: SIM: FLPOW:
+       FLUD: TRIVAA: MSTR: CRE:                    ;
+LINKED_LIST GeoCoeur Matex Track MacroRfl          ;
+LINKED_LIST FuelMap System Flux MacroFuel          ;
+LINKED_LIST dbref_03 dbref_34 dbref_45             ;
+LINKED_LIST dbref_03c dbref_03s                    ;
+LINKED_LIST dbref_34c dbref_34s                    ;
+LINKED_LIST dbref_45c dbref_45s                    ;
+LINKED_LIST dbrefl1   dbrefl2                      ;
+LINKED_LIST HISTORIC Puissance                     ;
+LINKED_LIST datathermo                             ;
+
+
+SEQ_ASCII   DBRE033.INP DBRE343.INP DBRE453.INP       ;
+SEQ_ASCII   DBRE034.INP DBRE344.INP DBRE454.INP       ;
+SEQ_ASCII   DBRE03c3.INP DBRE34c3.INP DBRE45c3.INP    ;
+SEQ_ASCII   DBRE03c4.INP DBRE34c4.INP DBRE45c4.INP    ;
+SEQ_ASCII   DBRE03s3.INP DBRE34s3.INP DBRE45s3.INP    ;
+SEQ_ASCII   DBRE03s4.INP DBRE34s4.INP DBRE45s4.INP    ;
+SEQ_ASCII   DBREFL1.INP  DBREFL2.INP                  ;
+SEQ_ASCII   DATATHRM.INP                              ;
+
+SEQ_ASCII   macroFl   :: FILE './macroFuel'        ;
+SEQ_ASCII   macroRfl                               ;
+SEQ_ASCII   fuelmap   :: FILE './FuelMap'          ;
+SEQ_ASCII   historic  :: FILE './histo'            ;
+
+ 
+*-------------------------------------------------------------------------
+* Definition des indices et variables
+*-------------------------------------------------------------------------
+
+REAL       Keff Pui ppmB           ;
+REAL       PuiCore      := 2032.0  ; !MW
+
+INTEGER    MaxReg       := 20384   ;
+
+INTEGER CycleIndex      := 1       ;
+INTEGER CycleRef        := INPUT1  ; ! 36 if INPUT3 = "4c"  ; 29 if "3c"
+INTEGER Step StepCycle  := 0  0    ;
+REAL    TimeFin                    ;
+REAL    TimeIni         := 0.      ;
+REAL    Time Delt       := 0. 0.   ; 
+
+STRING NameCycl    := "C" CycleIndex I_TO_S +   ; 
+STRING NamePreCycl                              ;
+STRING TimeModel   := INPUT2      ; ! "REP1b", "REP2", "CANDU5" or "CANDU3"  
+STRING LoadModel   := INPUT3      ; ! "3c" or "4c"                   
+
+REAL       TempMod  := 342.16     ;
+REAL       DensMod  :=   1.0851   ;
+REAL       ConcBore :=   1.0E-4   ;
+
+* Pour l enrichissement 03  
+
+REAL       DensCU1  :=   0.2624    ;    
+REAL       DensCD1  :=   0.584373  ;
+REAL       TempF1   :=   1056.26   ;
+REAL       TempCU1  :=   671.10    ;
+REAL       TempCD1  :=   634.62625 ;
+
+* Pour l enrichissement 34 
+
+REAL       DensCU2  :=   0.09515   ; 
+REAL       DensCD2  :=   0.600204  ;
+REAL       TempF2   :=   1319.40   ;
+REAL       TempCU2  :=   772.14    ;
+REAL       TempCD2  :=   630.3776  ;
+
+* Pour l enrichissement 45   
+
+REAL       DensCU3  :=   0.073707 ; 
+REAL       DensCD3  :=   0.612943 ;
+REAL       TempF3   :=   1429.44  ;
+REAL       TempCU3  :=   858.85   ;
+REAL       TempCD3  :=   626.9835 ;
+
+** PAR DEFAUT POUR LE 03, A ADAPTER POUR LES AUTRES   
+
+* Burnup initiaux  
+
+REAL       FuB1 FuB2 FuB3         ;
+
+IF LoadModel "3c" = THEN 
+  EVALUATE     FuB1     :=  23330.  ; !kW.d/t
+  EVALUATE     FuB2     :=  46660.  ; !kW.d/t
+  EVALUATE     FuB3     :=  100000. ; !Renvoi d'erreur 
+  EVALUATE     TimeFin  :=  405.    ; !Jours 
+  EVALUATE     Pui      :=  57.61   ; !kW/kg
+
+  dbref_03  := DBRE033.INP          ;  ! Multicompo
+  dbref_03c := DBRE03c3.INP         ;  ! Multicompo
+  dbref_03s := DBRE03s3.INP         ;  ! Multicompo
+  dbref_34  := DBRE343.INP          ;  ! Multicompo
+  dbref_34c := DBRE34c3.INP         ;  ! Multicompo
+  dbref_34s := DBRE34s3.INP         ;  ! Multicompo
+  dbref_45  := DBRE453.INP          ;  ! Multicompo
+  dbref_45c := DBRE45c3.INP         ;  ! Multicompo
+  dbref_45s := DBRE45s3.INP         ;  ! Multicompo
+
+ELSEIF LoadModel "4c" = THEN
+  EVALUATE     FuB1     :=  12500.  ; !kW.d/t
+  EVALUATE     FuB2     :=  25000.  ; !kW.d/t
+  EVALUATE     FuB3     :=  37500.  ; !kW.d/t
+  EVALUATE     TimeFin  :=  325.    ; !Jours 
+  EVALUATE     Pui      :=  38.40   ; !kW/kg
+
+  dbref_03  := DBRE034.INP          ;  ! Multicompo
+  dbref_03c := DBRE03c4.INP         ;  ! Multicompo
+  dbref_03s := DBRE03s4.INP         ;  ! Multicompo
+  dbref_34  := DBRE344.INP          ;  ! Multicompo
+  dbref_34c := DBRE34c4.INP         ;  ! Multicompo
+  dbref_34s := DBRE34s4.INP         ;  ! Multicompo
+  dbref_45  := DBRE454.INP          ;  ! Multicompo
+  dbref_45c := DBRE45c4.INP         ;  ! Multicompo
+  dbref_45s := DBRE45s4.INP         ;  ! Multicompo
+
+ENDIF                              ;    
+
+
+dbrefl1     := DBREFL1.INP        ;  ! Compo
+dbrefl2     := DBREFL2.INP        ;  ! Compo     
+datathermo  := DATATHRM.INP       ;  ! Premiere distribution thermo       
+
+*-------------------------------------------------------------------------
+* Definition de la geometrie du coeur 
+*-------------------------------------------------------------------------
+
+GeoCoeur Matex := SCWR64Geo3 :: <<MaxReg>>  ;
+
+*-------------------------------------------------------------------------
+* Tracking du coeur 
+*-------------------------------------------------------------------------
+
+Track := TRIVAT: GeoCoeur :: EDIT 5
+         MAXR <<MaxReg>>     MCFD 1     ;
+
+*-------------------------------------------------------------------------
+* Creation de la fuelmap
+*-------------------------------------------------------------------------
+
+FuelMap Matex := SCWR64FlIn3 Matex datathermo ::    
+   <<Pui>>      ; 
+
+*-------------------------------------------------------------------------
+* Initialisation de la macrolib et de la fuelmap pour cycle 1
+*-------------------------------------------------------------------------
+
+ECHO "Preparation du cycle" NameCycl                 ;
+
+FuelMap := SCWR64FlCy3 FuelMap :: 
+    <<FuB1>>    <<FuB2>>    <<FuB3>>      
+    <<Pui>>     <<TempMod>> <<DensMod>> <<ConcBore>>
+    <<DensCU1>> <<DensCU2>> <<DensCU3>> 
+    <<DensCD1>> <<DensCD2>> <<DensCD3>> 
+    <<TempF1>>  <<TempF2>>  <<TempF3>>  
+    <<TempCU1>> <<TempCU2>> <<TempCU3>>
+    <<TempCD1>> <<TempCD2>> <<TempCD3>>
+    <<NameCycl>> <<LoadModel>>                       ;
+
+ECHO "Preparation du cycle" NameCycl "terminee"      ;
+
+MacroRfl := CRE: dbrefl1 ::
+            EDIT 0 NMIX 2 
+            READ COMPO dbrefl1 
+            MIX  1 'REP_BOTT   1' 
+            ENDMIX                                   ;
+
+MacroRfl := CRE: MacroRfl dbrefl2 ::
+            EDIT 0  
+            READ COMPO dbrefl2 
+            MIX  2 'REP_BOTT   1' 
+            ENDMIX                                   ;
+
+
+WHILE CycleIndex CycleRef <= DO 
+
+*-------------------------------------------------------------------------
+* Boucle temporelle Cycle X
+*-------------------------------------------------------------------------
+
+WHILE Time TimeFin <= DO 
+
+  EVALUATE Step      := Step 1 +      ;
+  EVALUATE StepCycle := StepCycle 1 + ;
+
+*---------------------
+* Boucle de criticite (bore 0)
+*---------------------
+
+FuelMap Matex Flux MacroFuel := SCWR64Crit3 FuelMap Track Matex 
+                MacroRfl 
+                dbref_03  dbref_34  dbref_45 
+                dbref_03c dbref_03s 
+                dbref_34c dbref_34s 
+                dbref_45c dbref_45s  :: 
+   <<Step>> <<NameCycl>> <<Pui>> <<TempMod>> <<DensMod>> 
+   <<DensCU1>> <<DensCU2>> <<DensCU3>> 
+   <<DensCD1>> <<DensCD2>> <<DensCD3>> 
+   <<TempF1>>  <<TempF2>>  <<TempF3>>  
+   <<TempCU1>> <<TempCU2>> <<TempCU3>>
+   <<TempCD1>> <<TempCD2>> <<TempCD3>>                         
+   >>ppmB<< >>Keff<<                 ; 
+  
+  Puissance := FLPOW: FuelMap Flux Track Matex :: 
+  EDIT 0 PTOT <<PuiCore>> ; 
+
+*---------------------
+* Remplissage de l historique 
+*---------------------
+  IF Step 1 = THEN  
+    HISTORIC := MSTR: :: 
+    PUT 1 <<Step>>  "ppmB"        <<ppmB>>
+    PUT 1 <<Step>>  "K-EFFECTIVE" <<Keff>>  
+    PUT 1 <<Step>>  "TIME"        <<Time>>  ; 
+  ELSE 
+    HISTORIC := MSTR: HISTORIC :: 
+    PUT 1 <<Step>>  "ppmB"        <<ppmB>> 
+    PUT 1 <<Step>>  "K-EFFECTIVE" <<Keff>>  
+    PUT 1 <<Step>>  "TIME"        <<Time>>  ; 
+  ENDIF ;
+
+  *---------------------
+  * Bruler le combustible selon le modele d avancement 
+  *--------------------- 
+
+  IF TimeModel "REP1" = THEN 
+
+    *----
+    *  Schema REP1 (pas temporels en jours)
+    *  de 5    jours depuis  0    jusque  5   jours
+    *  de 10   jours depuis  5    jusque  105 jours
+    */ de 100  jours depuis  100  jusque  405 jours
+    ** de 100  jours depuis  100  jusque  305 jours 
+    ** de 20   jours depuis  305  jusque  325 jours  
+    *----
+
+    IF Time TimeIni = THEN 
+      EVALUATE Delt := 5.   ;
+    ELSEIF Time 5.  = THEN 
+      EVALUATE Delt := 10.  ;
+    ELSEIF Time 105. = THEN 
+      EVALUATE Delt := 100. ;
+    ELSEIF Time 305. = THEN 
+      IF LoadModel "4cycles" = THEN
+      EVALUATE Delt := 20.  ;
+      ENDIF                 ; 
+    ENDIF                   ;  
+
+  ELSEIF TimeModel "REP1b" = THEN 
+
+    *----
+    *  Schema REP1b (pas temporels en jours)
+    *  de 5    jours depuis  0    jusque  5   jours
+    *  de 25   jours depuis  5    jusque  105 jours
+    */ de 100  jours depuis  100  jusque  405 jours 
+    ** de 100  jours depuis  100  jusque  305 jours 
+    ** de 20   jours depuis  305  jusque  325 jours 
+    *----
+
+    IF Time TimeIni = THEN 
+      EVALUATE Delt := 5.   ;
+    ELSEIF Time 5.  = THEN 
+      EVALUATE Delt := 25.  ;
+    ELSEIF Time 105. = THEN 
+      EVALUATE Delt := 100. ;
+    ELSEIF Time 305. = THEN 
+      IF LoadModel "4cycles" = THEN
+      EVALUATE Delt := 20.  ;
+      ENDIF                 ; 
+    ENDIF                   ;
+
+  ELSEIF TimeModel "REP2" = THEN 
+
+    *----
+    *  Schema REP2 (pas temporels en jours)
+    *  de 2    jours depuis  0    jusque  10  jours
+    *  de 10   jours depuis  10   jusque  20  jours
+    *  de 35   jours depuis  20   jusque  55  jours 
+    *  de 50   jours depuis  55   jusque  105 jours 
+    */ de 100  jours depuis  105  jusque  405 jours 
+    ** de 100  jours depuis  105  jusque  305 jours 
+    ** de 20   jours depuis  305  jusque  325 jours  
+    *----
+
+    IF Time TimeIni = THEN 
+      EVALUATE Delt := 2.   ;
+    ELSEIF Time 10. = THEN 
+      EVALUATE Delt := 10.  ;
+    ELSEIF Time 20. = THEN 
+      EVALUATE Delt := 35.  ;
+    ELSEIF Time 55. = THEN 
+      EVALUATE Delt := 50.  ;
+    ELSEIF Time 105. = THEN 
+      EVALUATE Delt := 100. ;
+    ELSEIF Time 305. = THEN 
+      IF LoadModel "4cycles" = THEN
+      EVALUATE Delt := 20.  ;
+      ENDIF                 ; 
+    ENDIF                   ;
+
+  ELSEIF TimeModel "CANDU1" = THEN 
+    EVALUATE Delt := 1.     ;
+
+  ELSEIF TimeModel "CANDU2" = THEN
+    IF Time 404. = THEN  
+      EVALUATE Delt := 1.   ;
+    ELSEIF Time 324. = THEN  
+      IF TimeModel "4cycles" = THEN
+      EVALUATE Delt := 1.   ;
+      ENDIF                 ;
+    ELSE   
+      EVALUATE Delt := 2.   ;
+    ENDIF                   ;
+
+  ELSEIF TimeModel "CANDU3" = THEN
+      EVALUATE Delt := 5.   ;
+
+  ELSEIF TimeModel "CANDU5" = THEN
+    IF Time TimeIni = THEN 
+      EVALUATE Delt := 5.   ;
+    ELSEIF Time 5. = THEN 
+      EVALUATE Delt := 20.  ;
+    ENDIF                   ;
+
+  ENDIF                                      ;
+  
+*---------------------
+* Gerer le dernier calcul de flux ou on ne doit pas bruler le combustible
+*---------------------
+
+  IF Time TimeFin < THEN 
+
+    FuelMap := SIM: FuelMap Puissance ::
+    EDIT 0 
+    CYCLE <<NameCycl>>
+    TIME <<Delt>> DAY
+    ENDCYCLE                                   ;
+
+  ELSE
+
+    FuelMap := SIM: FuelMap Puissance ::
+    EDIT 0 
+    CYCLE <<NameCycl>>
+    TIME 0. DAY
+    ENDCYCLE                                   ;
+
+  ENDIF                                        ;
+
+  EVALUATE Time := Time Delt + ;
+
+  ECHO "<.time.>" Time ;
+  ECHO "<.delt.>" Delt ;
+*---------------------
+* Nettoyage 
+*---------------------
+
+  Flux MacroFuel := DELETE: Flux MacroFuel   ; 
+  Puissance      := DELETE: Puissance        ;
+
+ENDWHILE ;
+
+*-------------------------------------------------------------------------
+* Fin de boucle temporelle Cycle X
+*-------------------------------------------------------------------------
+
+EVALUATE Time := TimeIni                             ;
+
+EVALUATE StepCycle    := 0                           ;
+EVALUATE CycleIndex   := CycleIndex 1 +              ; 
+EVALUATE NamePreCycl  := NameCycl                    ;  
+
+IF CycleIndex CycleRef <= THEN 
+  EVALUATE NameCycl     := "C" CycleIndex I_TO_S +   ;
+
+ELSE 
+  EVALUATE NameCycl     := "Cycle" 1 I_TO_S +        ;
+
+ENDIF ; 
+
+*-------------------------------------------------------------------------
+* Rechargement et preparation pour le cycle 2 
+*-------------------------------------------------------------------------
+
+ECHO "Preparation du cycle" NameCycl                 ;
+
+   *---------------------
+   * Rechargement du combustible (ART08) 
+   *--------------------- 
+  
+     FuelMap := SCWR64Relo3 FuelMap :: 
+      <<Pui>>     <<TempMod>> <<DensMod>> <<ConcBore>>
+      <<DensCU1>> <<DensCU2>> <<DensCU3>> 
+      <<DensCD1>> <<DensCD2>> <<DensCD3>> 
+      <<TempF1>>  <<TempF2>>  <<TempF3>>  
+      <<TempCU1>> <<TempCU2>> <<TempCU3>>
+      <<TempCD1>> <<TempCD2>> <<TempCD3>> 
+      <<NameCycl>> <<NamePreCycl>> <<LoadModel>>     ;     
+
+ECHO "Preparation du cycle" NameCycl "terminee"      ;
+
+ENDWHILE ; 
+
+
+fuelmap  := FuelMap  ;
+historic := HISTORIC ;
+
+END: ; 
+QUIT "LIST" .

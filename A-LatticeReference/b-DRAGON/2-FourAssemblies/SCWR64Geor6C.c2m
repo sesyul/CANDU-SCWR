@@ -1,0 +1,300 @@
+*Deck SCWR64Geor6.c2m normal version
+*--------------------
+* Nom          : SCWR64Geor6.c2m
+* Utilisation  : Procedure de création de la géométrie d une cellule SCWR
+* Auteur       : U. Le Tennier 
+* Date         : 07/06/2019
+* Modifier     : 2019/10/23   6 matériaux dans combustibles
+*
+*---------------------------
+* DESCRIPTION DE LA PROCEDURE
+* Realisation des geometries d autoprotection et de flux d un quart de cellule 
+* 64 crayons de combustible (remplissage en fonction de l enrichissement voulu)
+*
+* GeoAutoPro GeoFlux := SCWR64Geor6  ;
+*
+* FICHIERS ECHANGES 
+* GeoAutoPro : Geometrie pour calcul autoprotection
+* GeoFlux    : Geometrie pour le calcul de flux
+*
+*
+*---------------------------------------------------------------
+* Definition des modules, procédures et structures de données
+*---------------------------------------------------------------
+PARAMETER GeoAutoPA 
+          GeoAutoPB 
+          GeoAutoPC  ::
+::: LINKED_LIST GeoAutoPA 
+                GeoAutoPB 
+                GeoAutoPC  ; ;
+MODULE GEO: END: ;
+
+*---------------------------------------------------------------
+* Definition des variables pour les mix (cf. fichier lib)
+*---------------------------------------------------------------
+*---------------------------------------------------------------
+* Calcul des angles
+*---------------------------------------------------------------
+*****
+* Dans chaque couronne, 16 crayons voisins des absorbants, 
+* Meme angles pour les deux couronnes 
+* Couronne interieure mix 9 10 11 
+* Couronne exterieure mix 15 16 17 
+
+REAL ang1 ang2  ang3  ang4  ang5  ang6  ang7  ang8                    
+     ang9 ang10 ang11 ang12 ang13 ang14 ang15 ang16           ;
+
+EVALUATE ang1  := 0.19635                                     ;    
+EVALUATE ang2  := 3.  ang1 *                                  ; 
+EVALUATE ang3  := 5.  ang1 *                                  ;
+EVALUATE ang4  := 7.  ang1 *                                  ;
+EVALUATE ang5  := 9.  ang1 *                                  ;
+EVALUATE ang6  := 11. ang1 *                                  ;
+EVALUATE ang7  := 13. ang1 *                                  ;
+EVALUATE ang8  := 15. ang1 *                                  ;
+EVALUATE ang9  := 17. ang1 *                                  ;
+EVALUATE ang10 := 19. ang1 *                                  ;
+EVALUATE ang11 := 21. ang1 *                                  ;
+EVALUATE ang12 := 23. ang1 *                                  ;
+EVALUATE ang13 := 25. ang1 *                                  ;
+EVALUATE ang14 := 27. ang1 *                                  ;
+EVALUATE ang15 := 29. ang1 *                                  ;
+EVALUATE ang16 := 31. ang1 *                                  ;
+
+*---------------------------------------------------------------
+* Geometrie pour autoprotection A
+*---------------------------------------------------------------
+GeoAutoPA := GEO: :: CARCEL 8 3 3 
+    EDIT 0 
+    X- SYME X+ REFL
+    Y- SYME Y+ REFL
+    MESHX -12.5 -8.4853 8.4853 12.5
+    MESHY -12.5 -8.4853 8.4853 12.5
+    RADIUS 0.00000 4.70000 5.97500 7.20000 7.25000 7.80000
+           7.85000 9.05000 12.50000 
+    MIX 1 4 4 2 3 6 6 7 7  
+        1 4 4 2 3 6 6 7 7
+        1 4 4 2 3 6 6 7 7
+        1 4 4 2 3 6 6 7 7
+        1 4 4 2 3 6 6 7 7  
+        1 4 4 2 3 6 6 7 7
+        1 4 4 2 3 6 6 7 7
+        1 4 4 2 3 6 6 7 7
+        1 4 4 2 3 6 6 7 7
+    CLUSTER RODW1 
+            RODI1 RODI2 RODBI 
+            RODE1 RODE2 RODBE
+    ::: RODW1 := GEO: TUBE 2
+         RADIUS 0.000 4.600 4.700
+         MIX    1 2 
+         NPIN   1 RPIN 0.0000 APIN 0.0000    ;
+    ::: RODI1 := GEO: TUBE 7 1 2 
+         RADIUS 0.000  0.1694   0.2396   0.29345   0.33885   0.37884
+                0.415 0.475
+         MESHX  -0.475  0.475
+         MESHY  -0.475 0.000 0.475
+         MIX    9 10 11 12 13 14 8 9 10 11 12 13 14  8 
+         NPIN   8 RPIN 5.4000 APIN 0.00000   ;
+    ::: RODI2 := GEO: TUBE 7 1 2 
+         RADIUS 0.000  0.1694   0.2396   0.29345   0.33885   0.37884
+                0.415  0.475
+         MESHX  -0.475  0.475
+         MESHY  -0.475 0.000 0.475
+         MIX    9 10 11 12 13 14 8 9 10 11 12 13 14  8 
+         NPIN   16 RPIN 5.4000
+         APIN   <<ang1>>  <<ang2>>  <<ang3>>  <<ang4>>
+                <<ang5>>  <<ang6>>  <<ang7>>  <<ang8>>
+                <<ang9>>  <<ang10>> <<ang11>> <<ang12>>
+                <<ang13>> <<ang14>> <<ang15>> <<ang16>> ;
+    ::: RODBI := GEO: TUBE 7 1 2 
+         RADIUS 0.000  0.1694  0.2396  0.29345  0.33885  0.37884
+                0.415  0.475
+         MESHX  -0.475  0.475
+         MESHY  -0.475 0.000 0.475
+         MIX    15 16 17 18 19 20 8 15 16 17 18 19 20 8 
+         NPIN   8 RPIN 5.4000 APIN 0.392699  ; 
+    ::: RODE1 := GEO: TUBE 7 1 2 
+         RADIUS  0.000  0.17963   0.2540   0.3111   0.3593   0.40166
+                 0.440 0.500
+         MESHX  -0.500  0.500
+         MESHY  -0.500 0.000 0.500
+         MIX    21 22 23 24 25 26 8 21 22 23 24 25 26 8 
+         NPIN   8 RPIN 6.5750 APIN 0.392699  ;
+    ::: RODE2 := GEO: TUBE 7 1 2 
+         RADIUS 0.000  0.17963   0.2540   0.3111   0.3593   0.40166
+                 0.440 0.500
+         MESHX  -0.500  0.500
+         MESHY  -0.500 0.000 0.500
+         MIX    21 22 23 24 25 26 8 21 22 23 24 25 26 8 
+         NPIN   16 RPIN 6.5750 
+         APIN   <<ang1>>  <<ang2>>  <<ang3>>  <<ang4>>
+                <<ang5>>  <<ang6>>  <<ang7>>  <<ang8>>
+                <<ang9>>  <<ang10>> <<ang11>> <<ang12>>
+                <<ang13>> <<ang14>> <<ang15>> <<ang16>> ;
+    ::: RODBE := GEO: TUBE 7 1 2 
+         RADIUS 0.000  0.17963   0.2540   0.3111   0.3593   0.40166
+                 0.440 0.500
+         MESHX  -0.500  0.500
+         MESHY  -0.500 0.000 0.500
+         MIX    27 28 29 30 31 32 8 27 28 29 30 31 32 8 
+         NPIN   8 RPIN 6.5750 APIN 0.00000   ; ;
+
+*---------------------------------------------------------------
+* Geometrie pour autoprotection B
+*---------------------------------------------------------------
+GeoAutoPB := GEO: :: CARCEL 8 3 3 
+    EDIT 0 
+    X- SYME X+ REFL
+    Y- SYME Y+ REFL
+    MESHX -12.5 -8.4853 8.4853 12.5
+    MESHY -12.5 -8.4853 8.4853 12.5
+    RADIUS 0.00000 4.70000 5.97500 7.20000 7.25000 7.80000
+           7.85000 9.05000 12.50000 
+    MIX 1 4 4 2 3 6 6 7 7  
+        1 4 4 2 3 6 6 7 7
+        1 4 4 2 3 6 6 7 7
+        1 4 4 2 3 6 6 7 7
+        1 4 4 2 3 6 6 7 7  
+        1 4 4 2 3 6 6 7 7
+        1 4 4 2 3 6 6 7 7
+        1 4 4 2 3 6 6 7 7
+        1 4 4 2 3 6 6 7 7
+    CLUSTER RODW1 
+            RODI1 RODI2 RODBI 
+            RODE1 RODE2 RODBE
+    ::: RODW1 := GEO: TUBE 2
+         RADIUS 0.000 4.600 4.700
+         MIX    1 2 
+         NPIN   1 RPIN 0.0000 APIN 0.0000    ;
+    ::: RODI1 := GEO: TUBE 7 1 2 
+         RADIUS 0.000  0.1694   0.2396   0.29345   0.33885   0.37884
+                0.415 0.475
+         MESHX  -0.475  0.475
+         MESHY  -0.475 0.000 0.475
+         MIX    33 34 35 36 37 38 8 33 34 35 36 37 38 8 
+         NPIN   8 RPIN 5.4000 APIN 0.00000   ;
+    ::: RODI2 := GEO: TUBE 7 1 2 
+         RADIUS 0.000  0.1694   0.2396   0.29345   0.33885   0.37884
+                0.415  0.475
+         MESHX  -0.475  0.475
+         MESHY  -0.475 0.000 0.475
+         MIX    33 34 35 36 37 38 8 33 34 35 36 37 38 8 
+         NPIN   16 RPIN 5.4000
+         APIN   <<ang1>>  <<ang2>>  <<ang3>>  <<ang4>>
+                <<ang5>>  <<ang6>>  <<ang7>>  <<ang8>>
+                <<ang9>>  <<ang10>> <<ang11>> <<ang12>>
+                <<ang13>> <<ang14>> <<ang15>> <<ang16>> ;
+    ::: RODBI := GEO: TUBE 7 1 2 
+         RADIUS 0.000  0.1694  0.2396  0.29345  0.33885  0.37884
+                0.415  0.475
+         MESHX  -0.475  0.475
+         MESHY  -0.475 0.000 0.475
+         MIX    39 40 41 42 43 44 8 39 40 41 42 43 44 8 
+         NPIN   8 RPIN 5.4000 APIN 0.392699  ; 
+    ::: RODE1 := GEO: TUBE 7 1 2 
+         RADIUS  0.000  0.17963   0.2540   0.3111   0.3593   0.40166
+                 0.440 0.500
+         MESHX  -0.500  0.500
+         MESHY  -0.500 0.000 0.500
+         MIX    45 46 47 48 49 50 8 45 46 47 48 49 50 8 
+         NPIN   8 RPIN 6.5750 APIN 0.392699  ;
+    ::: RODE2 := GEO: TUBE 7 1 2 
+         RADIUS 0.000  0.17963   0.2540   0.3111   0.3593   0.40166
+                 0.440 0.500
+         MESHX  -0.500  0.500
+         MESHY  -0.500 0.000 0.500
+         MIX    45 46 47 48 49 50 8 45 46 47 48 49 50 8 
+         NPIN   16 RPIN 6.5750 
+         APIN   <<ang1>>  <<ang2>>  <<ang3>>  <<ang4>>
+                <<ang5>>  <<ang6>>  <<ang7>>  <<ang8>>
+                <<ang9>>  <<ang10>> <<ang11>> <<ang12>>
+                <<ang13>> <<ang14>> <<ang15>> <<ang16>> ;
+    ::: RODBE := GEO: TUBE 7 1 2 
+         RADIUS 0.000  0.17963   0.2540   0.3111   0.3593   0.40166
+                 0.440 0.500
+         MESHX  -0.500  0.500
+         MESHY  -0.500 0.000 0.500
+         MIX    51 52 53 54 55 56 8 51 52 53 54 55 56 8 
+         NPIN   8 RPIN 6.5750 APIN 0.00000   ; ;
+
+
+*---------------------------------------------------------------
+* Geometrie pour autoprotection C
+*---------------------------------------------------------------
+GeoAutoPC := GEO: :: CARCEL 8 3 3 
+    EDIT 0 
+    X- SYME X+ REFL
+    Y- SYME Y+ REFL
+    MESHX -12.5 -8.4853 8.4853 12.5
+    MESHY -12.5 -8.4853 8.4853 12.5
+    RADIUS 0.00000 4.70000 5.97500 7.20000 7.25000 7.80000
+           7.85000 9.05000 12.50000 
+    MIX 1 4 4 2 3 6 6 7 7  
+        1 4 4 2 3 6 6 7 7
+        1 4 4 2 3 6 6 7 7
+        1 4 4 2 3 6 6 7 7
+        1 4 4 2 3 6 6 7 7  
+        1 4 4 2 3 6 6 7 7
+        1 4 4 2 3 6 6 7 7
+        1 4 4 2 3 6 6 7 7
+        1 4 4 2 3 6 6 7 7
+    CLUSTER RODW1 
+            RODI1 RODI2 RODBI 
+            RODE1 RODE2 RODBE
+    ::: RODW1 := GEO: TUBE 2
+         RADIUS 0.000 4.600 4.700
+         MIX    1 2 
+         NPIN   1 RPIN 0.0000 APIN 0.0000    ;
+    ::: RODI1 := GEO: TUBE 7 1 2 
+         RADIUS 0.000  0.1694   0.2396   0.29345   0.33885   0.37884
+                0.415 0.475
+         MESHX  -0.475  0.475
+         MESHY  -0.475 0.000 0.475
+         MIX    57 58 59 60 61 62 8 57 58 59 60 61 62 8 
+         NPIN   8 RPIN 5.4000 APIN 0.00000   ;
+    ::: RODI2 := GEO: TUBE 7 1 2 
+         RADIUS 0.000  0.1694   0.2396   0.29345   0.33885   0.37884
+                0.415  0.475
+         MESHX  -0.475  0.475
+         MESHY  -0.475 0.000 0.475
+         MIX    57 58 59 60 61 62 8 57 58 59 60 61 62 8 
+         NPIN   16 RPIN 5.4000
+         APIN   <<ang1>>  <<ang2>>  <<ang3>>  <<ang4>>
+                <<ang5>>  <<ang6>>  <<ang7>>  <<ang8>>
+                <<ang9>>  <<ang10>> <<ang11>> <<ang12>>
+                <<ang13>> <<ang14>> <<ang15>> <<ang16>> ;
+    ::: RODBI := GEO: TUBE 7 1 2 
+         RADIUS 0.000  0.1694  0.2396  0.29345  0.33885  0.37884
+                0.415  0.475
+         MESHX  -0.475  0.475
+         MESHY  -0.475 0.000 0.475
+         MIX    63 64 65 66 67 68 8 63 64 65 66 67 68 8 
+         NPIN   8 RPIN 5.4000 APIN 0.392699  ; 
+    ::: RODE1 := GEO: TUBE 7 1 2 
+         RADIUS  0.000  0.17963   0.2540   0.3111   0.3593   0.40166
+                 0.440 0.500
+         MESHX  -0.500  0.500
+         MESHY  -0.500 0.000 0.500
+         MIX    69 70 71 72 73 74 8 69 70 71 72 73 74 8 
+         NPIN   8 RPIN 6.5750 APIN 0.392699  ;
+    ::: RODE2 := GEO: TUBE 7 1 2 
+         RADIUS 0.000  0.17963   0.2540   0.3111   0.3593   0.40166
+                 0.440 0.500
+         MESHX  -0.500  0.500
+         MESHY  -0.500 0.000 0.500
+         MIX    69 70 71 72 73 74 8 69 70 71 72 73 74 8 
+         NPIN   16 RPIN 6.5750 
+         APIN   <<ang1>>  <<ang2>>  <<ang3>>  <<ang4>>
+                <<ang5>>  <<ang6>>  <<ang7>>  <<ang8>>
+                <<ang9>>  <<ang10>> <<ang11>> <<ang12>>
+                <<ang13>> <<ang14>> <<ang15>> <<ang16>> ;
+    ::: RODBE := GEO: TUBE 7 1 2 
+         RADIUS 0.000  0.17963   0.2540   0.3111   0.3593   0.40166
+                 0.440 0.500
+         MESHX  -0.500  0.500
+         MESHY  -0.500 0.000 0.500
+         MIX    75 76 77 78 79 80 8 75 76 77 78 79 80 8
+         NPIN   8 RPIN 6.5750 APIN 0.00000   ; ;
+
+END: ;
+QUIT "LIST" .

@@ -1,0 +1,261 @@
+*Deck MainDragonSCWR2D normal version
+*--------------------
+* Nom          : CalculSCWR64.x2m
+* Utilisation  : Procedure de création de la cellule de CANDU SCWR 
+*                64 crayons
+* Auteur       : U. Le Tennier 
+* Date         : 07/06/2019
+* Modifie      : /
+*
+*---------------------------
+* DECRIPTION DU PROGRAMME
+* Realisation des geometries, tracking et bibliotheque de sections eff
+* Realisation du calcul de flux et boucle d evolution avec sortie d une multicompo 
+* 64 crayons de combustible
+*
+* PROCEDURES
+* SCWR64Geor6  : Definition de la geometrie 
+* SCWR64Libc6  : Creation de bibli de sections efficaces
+* SCWR64Evoc6  : Calcul de flux, evolution et multicompo
+*
+* FICHIERS ECHANGES 
+* GeoAutoPro    : Geometrie pour calcul autoprotection
+* GeoFlux       : Geometrie pour le calcul de flux
+* VolumAutoPro  : Fichier de tracking pour l autoprotection
+* LignAutoPro   : Lignes d integration pour autoprotection
+* VolumFlux     : Fichier de tracking pour le flux
+* LignFlux      : Lignes d integration pour flux
+* BiblioInt     : Biliotheque interne requise pour les calculs
+* Editing2      : Sortie de EDI: pour produire la multicompo
+* ConcIso       : Concentration isotopique en fonction du temps (sortie de EVO:)
+* dbXXX         : Multicompo pour chaque Enrichissement
+* dbRef        : Base de donnee pour reflecteur 
+*
+* REELS ET ENTIERS 
+*
+* ITERATION    : Enrichissement considere (valeurs de 1 à 3)
+* 1 = bottom 0-3m
+* 2 = middle 3-4m
+* 3 = top    4-5m
+* ITERATIONref : Valeur comparee a ITERATION pour changer la valeur de BINAIRE 
+*
+* TempsFin    : Date a laquelle le calcul d evolution doit s arreter  (jours)
+* Puissance   : Puissance du reacteur pour un cycle de 405 jours      (kW/kg)
+*
+* TempCaloUp   : Temperature du caloporteur qui remonte               (K)
+* TempCaloDw   : Temperature du caloporteur qui descend               (K)
+* DensCaloUp   : Densite du caloporteur qui remonte                   (g/cm3)
+* DensCaloDw   : Densite du caloporteur qui descend (quasi constante) (g/cm3)
+* TempFuel     : Temperature combustible                              (K)
+* TempLiner    : Temperature liner (une Temp unique pour tous)        (K)
+* TempTubFrc   : Temperature tube de force                            (K)
+* TempGaine    : Temperature gaine                                    (K)
+* TempIsol     : Temperature de l isolant                             (K)
+*olala
+* 
+*---------------------------------------------------------------
+* Definition des modules, procédures et structures de données
+*---------------------------------------------------------------
+MODULE        DELETE: NXT: PSP: FMT: END:                     ;
+PROCEDURE     SCWR64Libc6 SCWR64Evoc6 SCWR64Geor6             ;
+LINKED_LIST   GeoAutoPro GeoFlux VolumAutoPro VolumFlux       ;
+LINKED_LIST   ConcIso Editing2                                ;
+LINKED_LIST   BiblioInt                                       ;
+SEQ_ASCII     dbRef           :: FILE './dbRef'               ;                                        
+SEQ_ASCII     dbBot           :: FILE './dbBot'               ;
+SEQ_ASCII     dbMid           :: FILE './dbMid'               ;
+SEQ_ASCII     dbTop           :: FILE './dbTop'               ;
+SEQ_ASCII     Edit03          :: FILE './03.edi'              ;
+SEQ_ASCII     Edit34          :: FILE './34.edi'              ;
+SEQ_ASCII     Edit45          :: FILE './45.edi'              ;
+SEQ_ASCII     ConcIso03       :: FILE './03.con'              ;
+SEQ_ASCII     ConcIso34       :: FILE './34.con'              ;
+SEQ_ASCII     ConcIso45       :: FILE './45.con'              ;
+SEQ_ASCII     LB1a            ; !:: FILE './LB1a'                ;
+SEQ_ASCII     LB1b.m          :: FILE './LB1b.m'              ;
+SEQ_ASCII     LB1c.m          :: FILE './LB1c.m'              ;
+SEQ_ASCII     LB1d.m          :: FILE './LB1d.m'              ;
+SEQ_ASCII     GeoA.eps        :: FILE './GeoA.eps'            ;
+SEQ_ASCII     GeoF.eps        :: FILE './GeoF.eps'            ;
+
+SEQ_BINARY    LignAutoPro LignFlux                            ;
+
+INTEGER       ITERATION       := 3                            ;
+INTEGER       ITERATIONref    := 3                            ;
+INTEGER       Maillage        := 172                          ;
+
+REAL          TempsFin        := 1710.                        ;
+
+*
+* test tracking 19 300.
+*
+* PUISSANCE EVOLUTION
+* Trois options : 85 GWd/T avec 3*405 d -> ~ 70.0 kW/kg Ref
+*                 50 GWd/T avec 4*325 d -> ~ 38.4 kW/kg BP
+*                 70 GWd/T avec 3*405 d -> ~ 57.6 kW/kg 
+*
+* Ici on utilise 57.61 kw/kg 
+* pour 0.0 jusque 405.0 jours + arret 30 jours
+* Selon "Analysis of Control Rod Drop Accidents for the Canadian SCWR Using Coupled 3-Dimensional "
+* "Neutron Kinetics and Thermal Hydraulics" de F. Salaun et D. R. Novog (Hindawi, 2017)
+* L article ne precise pas que les 70 GWd/T sont pour 3 cycles
+*
+REAL          Puissance     :=  57.61                         ;
+REAL          TempCaloUp    :=  671.10                        ;
+REAL          TempCaloDw    :=  634.62625                     ; 
+REAL          DensCaloUp    :=    0.2624                      ; 
+REAL          DensCaloDw    :=    0.584373                    ;
+REAL          DensMod       :=    1.0851                      ;
+REAL          TempFuel      := 1056.26                        ;
+REAL          TempMod       :=  342.16                        ;
+REAL          TempLiner     :=  663.30                        ;
+REAL          TempTubFrc    :=  414.94                        ;
+REAL          TempGaine     :=  723.22                        ;
+REAL          TempIsol      :=  551.80                        ;
+
+REAL          ConcBore      :=  0.0001                        ;
+STRING        LoadModel     :=  "3c" ; ! "4c"
+
+*---------------------------------------------------------------
+* Note GM
+* Definition des geometries (une seule fois)
+*---------------------------------------------------------------
+GeoAutoPro GeoFlux := SCWR64Geor6 ;
+
+*---------------------------------------------------------------
+* Definition des geometries a analyser
+*---------------------------------------------------------------
+VolumAutoPro LignAutoPro := NXT: GeoAutoPro :: EDIT 2 TISO 9 75.0 ;
+VolumFlux    LignFlux    := NXT: GeoFlux    :: EDIT 2 TISO 9 75.0 ;
+GeoAutoPro GeoFlux := DELETE: GeoAutoPro GeoFlux ;
+*---------------------------------------------------------------
+* Debut de boucle while 
+*---------------------------------------------------------------
+WHILE ITERATION ITERATIONref <= DO
+
+
+*---------------------------------------------------------------
+* Creation des figures et images de la geometrie + changement des parametres physiques
+*---------------------------------------------------------------
+IF ITERATION 2 = THEN 
+
+    EVALUATE  TempCaloUp    :=  772.14                     ;
+    EVALUATE  TempCaloDw    :=  630.3776                   ;
+    EVALUATE  DensCaloUp    :=    0.09515                  ;
+    EVALUATE  DensCaloDw    :=    0.600204                 ;
+    EVALUATE  TempFuel      := 1319.40                     ;
+    EVALUATE  TempLiner     :=  752.53                     ;
+    EVALUATE  TempTubFrc    :=  432.02                     ;
+    EVALUATE  TempGaine     :=  905.87                     ;
+    EVALUATE  TempIsol      :=  607.13                     ;
+
+ELSEIF ITERATION 3 = THEN
+
+    EVALUATE  TempCaloUp    :=  858.85                     ;
+    EVALUATE  TempCaloDw    :=  626.9835                   ;
+    EVALUATE  DensCaloUp    :=    0.073707                 ;
+    EVALUATE  DensCaloDw    :=    0.612943                 ;
+    EVALUATE  DensMod       :=    1.0851                   ;
+    EVALUATE  TempFuel      := 1429.44                     ;
+    EVALUATE  TempLiner     :=  830.97                     ;
+    EVALUATE  TempTubFrc    :=  447.55                     ;
+    EVALUATE  TempGaine     := 1002.23                     ;
+    EVALUATE  TempIsol      :=  655.61                     ;
+
+ENDIF                                                      ;
+
+*---------------------------------------------------------------
+* Creation de bibliotheque interne
+*---------------------------------------------------------------
+ BiblioInt := SCWR64Libc6  :: <<ITERATION>>
+                              <<TempCaloUp>> <<TempCaloDw>> 
+                              <<DensCaloUp>> <<DensCaloDw>>
+                              <<TempFuel>>   <<TempLiner>>   
+                              <<TempTubFrc>> <<TempMod>>
+                              <<TempGaine>>  <<TempIsol>>   
+                              <<DensMod>>    <<ConcBore>>   
+                              <<Maillage>>                   ;
+LB1a := BiblioInt ;
+*---------------
+* Calcul de flux et d evolution
+*---------------
+IF     ITERATION 1 = THEN 
+
+
+dbBot dbRef Editing2 ConcIso := SCWR64Evoc6 
+VolumAutoPro VolumFlux  BiblioInt  LignAutoPro LignFlux   
+:: <<Puissance>> <<ITERATION>> 
+   <<TempsFin>> <<DensCaloUp>>   
+   <<DensCaloDw>> <<DensMod>> <<ConcBore>> <<TempFuel>>
+   <<TempMod>> <<TempCaloUp>> <<TempCaloDw>> <<LoadModel>>  ;
+
+LB1b.m     := FMT: Editing2 ConcIso ::
+  EDIT 0 
+  BURNUP 
+  ISOP Np239 Pu238 Pu239 Pu240 Pu241 Pu242 Th232 Pa233 U233 
+       Gd152 Gd154 Gd155 Gd156 Gd157 Gd158 Gd160
+       Sm149 Xe135                ;
+
+ConcIso03 := ConcIso ;
+
+ELSEIF ITERATION 2 = THEN
+
+dbRef := VolumAutoPro ;
+
+dbMid dbRef Editing2 ConcIso := SCWR64Evoc6 dbRef
+VolumAutoPro VolumFlux BiblioInt LignAutoPro LignFlux  
+:: <<Puissance>> <<ITERATION>> 
+   <<TempsFin>> <<DensCaloUp>> 
+   <<DensCaloDw>> <<DensMod>> <<ConcBore>> <<TempFuel>> 
+   <<TempMod>> <<TempCaloUp>> <<TempCaloDw>> <<LoadModel>>  ;
+
+LB1c.m     := FMT: Editing2 ConcIso ::
+  EDIT 0 
+  BURNUP 
+  ISOP Np239 Pu238 Pu239 Pu240 Pu241 Pu242 Th232 Pa233 U233 
+       Gd152 Gd154 Gd155 Gd156 Gd157 Gd158 Gd160
+       Sm149 Xe135                ;
+
+ConcIso34 := ConcIso ;
+
+ELSE 
+
+dbRef := VolumAutoPro ;
+
+dbTop dbRef Editing2 ConcIso  := SCWR64Evoc6 dbRef
+VolumAutoPro VolumFlux BiblioInt  LignAutoPro LignFlux  
+:: <<Puissance>> <<ITERATION>> 
+   <<TempsFin>> <<DensCaloUp>> 
+   <<DensCaloDw>> <<DensMod>>  <<ConcBore>> <<TempFuel>> 
+   <<TempMod>> <<TempCaloUp>> <<TempCaloDw>> <<LoadModel>>  ;
+
+LB1d.m     := FMT: Editing2 ConcIso ::
+  EDIT 0 
+  BURNUP 
+  ISOP Np239 Pu238 Pu239 Pu240 Pu241 Pu242 Th232 Pa233 U233 
+       Gd152 Gd154 Gd155 Gd156 Gd157 Gd158 Gd160
+       Sm149 Xe135                ;
+
+ConcIso45 := ConcIso ;
+
+ENDIF                                                      ; 
+
+
+*---------------
+* Nettoyage pour pouvoir faire l enrichissement suivant 
+*---------------
+BiblioInt Editing2     := DELETE: BiblioInt Editing2       ;
+ConcIso LB1a           := DELETE: ConcIso LB1a             ;
+
+*---------------------------------------------------------------
+* Fin de boucle while 
+*---------------------------------------------------------------
+EVALUATE ITERATION := ITERATION 1 +                        ;
+
+ENDWHILE                                                   ;
+LignAutoPro LignFlux   := DELETE: LignAutoPro LignFlux     ;
+VolumAutoPro VolumFlux := DELETE: VolumAutoPro VolumFlux   ;
+
+
+END: ;
+QUIT "LIST" .

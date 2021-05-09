@@ -1,0 +1,894 @@
+*--------------------
+* Nom          : SCWR64MacUp.c2m
+* Utilisation  : Mise a jour des macrolibs reacteur 
+* Auteur       : U. Le Tennier 
+* Date         : 03/06/2019
+* Modifier     : /
+*
+*---------------------------
+* Descritpion de la procedure
+*
+* Construction de la macrolib reacteur pour le chargement
+*
+* 
+* MacroFl := SCWR64MacUp dbref_03 dbref_34 dbref_34 FuelMapTmp 
+*          :: <<Pui>> <<TempMod>> <<DensMod>> 
+*    <<DensCU1>> <<DensCU2>> <<DensCU3>> <<DensCD1>> <<DensCD2>> <<DensCD3>> 
+*    <<TempF1>>  <<TempF2>>  <<TempF3>>  <<TempCU1>> <<TempCU2>> <<TempCU3>>
+*    <<TempCD1>> <<TempCD2>> <<TempCD3>> <<ConcBore>>                       ;
+*
+*-------------------------------------------------------------------------
+* Definition des structures de donnees a echanger
+*-------------------------------------------------------------------------
+PARAMETER MacroFl dbref_03  dbref_34  dbref_45 FuelMapTmp 
+                  dbref_03c dbref_03s dbref_34c dbref_34s
+                  dbref_45c dbref_45s :: 
+          ::: LINKED_LIST MacroFl
+          dbref_03  dbref_34  dbref_45 FuelMapTmp  
+          dbref_03c dbref_03s                                  
+          dbref_34c dbref_34s                                  
+          dbref_45c dbref_45s                                  ; ;
+          
+MODULE NCR: END:                                               ;
+
+*-------------------------------------------------------------------------
+* Recuperation des donnes d entree
+*-------------------------------------------------------------------------
+
+  REAL  Pui     TempMod     DensMod                              ; 
+ ::   >>Pui<< >>TempMod<< >>DensMod<<                            ;
+  REAL DensCU1     DensCU2     DensCU3     DensCD1     DensCD2     
+       DensCD3     TempF1      TempF2      TempF3      TempCU1 
+       TempCU2     TempCU3     TempCD1     TempCD2     TempCD3 
+       ppmB                                                  ;
+::   >>DensCU1<< >>DensCU2<< >>DensCU3<< >>DensCD1<< >>DensCD2<<   
+     >>DensCD3<< >>TempF1<<  >>TempF2<<  >>TempF3<<  >>TempCU1<<
+     >>TempCU2<< >>TempCU3<< >>TempCD1<< >>TempCD2<< >>TempCD3<<
+     >>ppmB<<                                                ;
+
+ECHO DensCU1 DensCD1 TempF1 TempCU1 TempCD1 Pui ;
+
+*-------------------------------------------------------------------------
+* Generation des melanges 
+*-------------------------------------------------------------------------
+
+MacroFl := NCR: dbref_03 dbref_03c dbref_03s 
+                dbref_34 dbref_34c dbref_34s
+                dbref_45 dbref_45c dbref_45s FuelMapTmp ::
+    EDIT 0
+    MACRO     
+
+
+    TABLE dbref_34 'Rep_34'  'burnup'
+    MIX 4 
+    SET CUBIC  'Bore ppm    ' 1.E-4
+    SET CUBIC  'CaloUp Dens ' <<DensCU1>>
+    SET CUBIC  'CaloDw Dens ' <<DensCD1>>
+    SET CUBIC  'Fuel Temp   ' <<TempF1>>
+    SET CUBIC  'CaloUp Temp ' <<TempCU1>>
+    SET CUBIC  'CaloDw Temp ' <<TempCD1>>
+    SET CUBIC  'Puissance   ' <<Pui>>
+
+    ADD 'CaloDw Dens ' <<DensCD1>> MAP
+    REF 
+        'Bore ppm    ' 1.E-4
+        'CaloUp Temp ' SAMEASREF
+        'Fuel Temp   ' SAMEASREF
+        'CaloUp Dens ' SAMEASREF
+        'CaloDw Temp ' SAMEASREF
+        'Puissance   ' SAMEASREF
+        'burnup'       SAMEASREF
+    ENDREF 
+
+    ADD 'CaloDw Temp ' <<TempCD1>> MAP
+    REF 
+        'Bore ppm    ' 1.E-4
+        'CaloUp Temp ' SAMEASREF
+        'Fuel Temp   ' SAMEASREF
+        'CaloUp Dens ' SAMEASREF
+        'CaloDw Dens ' SAMEASREF
+        'Puissance   ' SAMEASREF
+        'burnup'       SAMEASREF
+    ENDREF 
+ 
+
+ADD 'Bore ppm    ' 1.E-4 <<ppmB>>
+    REF 
+        'CaloUp Dens ' SAMEASREF
+        'CaloUp Temp ' SAMEASREF
+        'Fuel Temp   ' SAMEASREF
+        'CaloDw Dens ' SAMEASREF
+        'CaloDw Temp ' SAMEASREF
+        'Puissance   ' SAMEASREF
+        'burnup'       SAMEASREF
+    ENDREF 
+
+    ADD 'CaloUp Dens ' <<DensCU1>> MAP
+    REF 
+        'Bore ppm    ' 1.E-4
+        'CaloUp Temp ' SAMEASREF
+        'Fuel Temp   ' SAMEASREF
+        'CaloDw Dens ' SAMEASREF
+        'CaloDw Temp ' SAMEASREF
+        'Puissance   ' SAMEASREF
+        'burnup'       SAMEASREF
+    ENDREF 
+
+
+
+    ADD 'CaloUp Temp ' <<TempCU1>> MAP
+    REF 
+        'Bore ppm    ' 1.E-4
+        'CaloUp Dens ' SAMEASREF
+        'Fuel Temp   ' SAMEASREF
+        'CaloDw Dens ' SAMEASREF
+        'CaloDw Temp ' SAMEASREF
+        'Puissance   ' SAMEASREF
+        'burnup'       SAMEASREF
+    ENDREF 
+    
+    ADD 'Fuel Temp   ' <<TempF1>> MAP
+    REF 
+        'Bore ppm    ' 1.E-4
+        'CaloUp Temp ' SAMEASREF
+        'CaloDw Temp ' SAMEASREF
+        'CaloUp Dens ' SAMEASREF
+        'CaloDw Dens ' SAMEASREF
+        'Puissance   ' SAMEASREF
+        'burnup'       SAMEASREF
+    ENDREF 
+
+    ADD 'Puissance   ' <<Pui>> MAP
+    REF 
+        'Bore ppm    ' 1.E-4
+        'CaloUp Temp ' SAMEASREF
+        'CaloDw Temp ' SAMEASREF
+        'CaloUp Dens ' SAMEASREF
+        'CaloDw Dens ' SAMEASREF
+        'Fuel Temp   ' SAMEASREF
+        'burnup'       SAMEASREF
+    ENDREF 
+
+    ENDMIX 
+
+    TABLE dbref_34s 'Rep_34S'  'burnup'
+    MIX 7 
+    SET CUBIC  'Bore ppm    ' 1.E-4
+    SET CUBIC  'CaloUp Dens ' <<DensCU1>>
+    SET CUBIC  'CaloDw Dens ' <<DensCD1>>
+    SET CUBIC  'Fuel Temp   ' <<TempF1>>
+    SET CUBIC  'CaloUp Temp ' <<TempCU1>>
+    SET CUBIC  'CaloDw Temp ' <<TempCD1>>
+    SET CUBIC  'Puissance   ' <<Pui>>
+
+    ADD 'CaloDw Dens ' <<DensCD1>> MAP
+    REF 
+        'Bore ppm    ' 1.E-4
+        'CaloUp Temp ' SAMEASREF
+        'Fuel Temp   ' SAMEASREF
+        'CaloUp Dens ' SAMEASREF
+        'CaloDw Temp ' SAMEASREF
+        'Puissance   ' SAMEASREF
+        'burnup'       SAMEASREF
+    ENDREF 
+
+    ADD 'CaloDw Temp ' <<TempCD1>> MAP
+    REF 
+        'Bore ppm    ' 1.E-4
+        'CaloUp Temp ' SAMEASREF
+        'Fuel Temp   ' SAMEASREF
+        'CaloUp Dens ' SAMEASREF
+        'CaloDw Dens ' SAMEASREF
+        'Puissance   ' SAMEASREF
+        'burnup'       SAMEASREF
+    ENDREF 
+ 
+
+ADD 'Bore ppm    ' 1.E-4 <<ppmB>>
+    REF 
+        'CaloUp Dens ' SAMEASREF
+        'CaloUp Temp ' SAMEASREF
+        'Fuel Temp   ' SAMEASREF
+        'CaloDw Dens ' SAMEASREF
+        'CaloDw Temp ' SAMEASREF
+        'Puissance   ' SAMEASREF
+        'burnup'       SAMEASREF
+    ENDREF 
+
+    ADD 'CaloUp Dens ' <<DensCU1>> MAP
+    REF 
+        'Bore ppm    ' 1.E-4
+        'CaloUp Temp ' SAMEASREF
+        'Fuel Temp   ' SAMEASREF
+        'CaloDw Dens ' SAMEASREF
+        'CaloDw Temp ' SAMEASREF
+        'Puissance   ' SAMEASREF
+        'burnup'       SAMEASREF
+    ENDREF 
+
+
+
+    ADD 'CaloUp Temp ' <<TempCU1>> MAP
+    REF 
+        'Bore ppm    ' 1.E-4
+        'CaloUp Dens ' SAMEASREF
+        'Fuel Temp   ' SAMEASREF
+        'CaloDw Dens ' SAMEASREF
+        'CaloDw Temp ' SAMEASREF
+        'Puissance   ' SAMEASREF
+        'burnup'       SAMEASREF
+    ENDREF 
+    
+    ADD 'Fuel Temp   ' <<TempF1>> MAP
+    REF 
+        'Bore ppm    ' 1.E-4
+        'CaloUp Temp ' SAMEASREF
+        'CaloDw Temp ' SAMEASREF
+        'CaloUp Dens ' SAMEASREF
+        'CaloDw Dens ' SAMEASREF
+        'Puissance   ' SAMEASREF
+        'burnup'       SAMEASREF
+    ENDREF 
+
+    ADD 'Puissance   ' <<Pui>> MAP
+    REF 
+        'Bore ppm    ' 1.E-4
+        'CaloUp Temp ' SAMEASREF
+        'CaloDw Temp ' SAMEASREF
+        'CaloUp Dens ' SAMEASREF
+        'CaloDw Dens ' SAMEASREF
+        'Fuel Temp   ' SAMEASREF
+        'burnup'       SAMEASREF
+    ENDREF 
+
+    ENDMIX 
+
+    TABLE dbref_34c 'Rep_34C'  'burnup'
+    MIX 10 
+    SET CUBIC  'Bore ppm    ' 1.E-4
+    SET CUBIC  'CaloUp Dens ' <<DensCU1>>
+    SET CUBIC  'CaloDw Dens ' <<DensCD1>>
+    SET CUBIC  'Fuel Temp   ' <<TempF1>>
+    SET CUBIC  'CaloUp Temp ' <<TempCU1>>
+    SET CUBIC  'CaloDw Temp ' <<TempCD1>>
+    SET CUBIC  'Puissance   ' <<Pui>>
+
+    ADD 'CaloDw Dens ' <<DensCD1>> MAP
+    REF 
+        'Bore ppm    ' 1.E-4
+        'CaloUp Temp ' SAMEASREF
+        'Fuel Temp   ' SAMEASREF
+        'CaloUp Dens ' SAMEASREF
+        'CaloDw Temp ' SAMEASREF
+        'Puissance   ' SAMEASREF
+        'burnup'       SAMEASREF
+    ENDREF 
+
+    ADD 'CaloDw Temp ' <<TempCD1>> MAP
+    REF 
+        'Bore ppm    ' 1.E-4
+        'CaloUp Temp ' SAMEASREF
+        'Fuel Temp   ' SAMEASREF
+        'CaloUp Dens ' SAMEASREF
+        'CaloDw Dens ' SAMEASREF
+        'Puissance   ' SAMEASREF
+        'burnup'       SAMEASREF
+    ENDREF 
+ 
+
+ADD 'Bore ppm    ' 1.E-4 <<ppmB>>
+    REF 
+        'CaloUp Dens ' SAMEASREF
+        'CaloUp Temp ' SAMEASREF
+        'Fuel Temp   ' SAMEASREF
+        'CaloDw Dens ' SAMEASREF
+        'CaloDw Temp ' SAMEASREF
+        'Puissance   ' SAMEASREF
+        'burnup'       SAMEASREF
+    ENDREF 
+
+    ADD 'CaloUp Dens ' <<DensCU1>> MAP
+    REF 
+        'Bore ppm    ' 1.E-4
+        'CaloUp Temp ' SAMEASREF
+        'Fuel Temp   ' SAMEASREF
+        'CaloDw Dens ' SAMEASREF
+        'CaloDw Temp ' SAMEASREF
+        'Puissance   ' SAMEASREF
+        'burnup'       SAMEASREF
+    ENDREF 
+
+
+
+    ADD 'CaloUp Temp ' <<TempCU1>> MAP
+    REF 
+        'Bore ppm    ' 1.E-4
+        'CaloUp Dens ' SAMEASREF
+        'Fuel Temp   ' SAMEASREF
+        'CaloDw Dens ' SAMEASREF
+        'CaloDw Temp ' SAMEASREF
+        'Puissance   ' SAMEASREF
+        'burnup'       SAMEASREF
+    ENDREF 
+    
+    ADD 'Fuel Temp   ' <<TempF1>> MAP
+    REF 
+        'Bore ppm    ' 1.E-4
+        'CaloUp Temp ' SAMEASREF
+        'CaloDw Temp ' SAMEASREF
+        'CaloUp Dens ' SAMEASREF
+        'CaloDw Dens ' SAMEASREF
+        'Puissance   ' SAMEASREF
+        'burnup'       SAMEASREF
+    ENDREF 
+
+    ADD 'Puissance   ' <<Pui>> MAP
+    REF 
+        'Bore ppm    ' 1.E-4
+        'CaloUp Temp ' SAMEASREF
+        'CaloDw Temp ' SAMEASREF
+        'CaloUp Dens ' SAMEASREF
+        'CaloDw Dens ' SAMEASREF
+        'Fuel Temp   ' SAMEASREF
+        'burnup'       SAMEASREF
+    ENDREF 
+
+    ENDMIX    
+
+
+    TABLE dbref_03 'Rep_03'  'burnup'
+    MIX 5 
+    SET CUBIC  'Bore ppm    ' 1.E-4
+    SET CUBIC  'CaloUp Dens ' <<DensCU1>>
+    SET CUBIC  'CaloDw Dens ' <<DensCD1>>
+    SET CUBIC  'Fuel Temp   ' <<TempF1>>
+    SET CUBIC  'CaloUp Temp ' <<TempCU1>>
+    SET CUBIC  'CaloDw Temp ' <<TempCD1>>
+    SET CUBIC  'Puissance   ' <<Pui>>
+
+    ADD 'CaloDw Dens ' <<DensCD1>> MAP
+    REF 
+        'Bore ppm    ' 1.E-4
+        'CaloUp Temp ' SAMEASREF
+        'Fuel Temp   ' SAMEASREF
+        'CaloUp Dens ' SAMEASREF
+        'CaloDw Temp ' SAMEASREF
+        'Puissance   ' SAMEASREF
+        'burnup'       SAMEASREF
+    ENDREF 
+
+    ADD 'CaloDw Temp ' <<TempCD1>> MAP
+    REF 
+        'Bore ppm    ' 1.E-4
+        'CaloUp Temp ' SAMEASREF
+        'Fuel Temp   ' SAMEASREF
+        'CaloUp Dens ' SAMEASREF
+        'CaloDw Dens ' SAMEASREF
+        'Puissance   ' SAMEASREF
+        'burnup'       SAMEASREF
+    ENDREF 
+ 
+
+ADD 'Bore ppm    ' 1.E-4 <<ppmB>>
+    REF 
+        'CaloUp Dens ' SAMEASREF
+        'CaloUp Temp ' SAMEASREF
+        'Fuel Temp   ' SAMEASREF
+        'CaloDw Dens ' SAMEASREF
+        'CaloDw Temp ' SAMEASREF
+        'Puissance   ' SAMEASREF
+        'burnup'       SAMEASREF
+    ENDREF 
+
+    ADD 'CaloUp Dens ' <<DensCU1>> MAP
+    REF 
+        'Bore ppm    ' 1.E-4
+        'CaloUp Temp ' SAMEASREF
+        'Fuel Temp   ' SAMEASREF
+        'CaloDw Dens ' SAMEASREF
+        'CaloDw Temp ' SAMEASREF
+        'Puissance   ' SAMEASREF
+        'burnup'       SAMEASREF
+    ENDREF 
+
+
+
+    ADD 'CaloUp Temp ' <<TempCU1>> MAP
+    REF 
+        'Bore ppm    ' 1.E-4
+        'CaloUp Dens ' SAMEASREF
+        'Fuel Temp   ' SAMEASREF
+        'CaloDw Dens ' SAMEASREF
+        'CaloDw Temp ' SAMEASREF
+        'Puissance   ' SAMEASREF
+        'burnup'       SAMEASREF
+    ENDREF 
+    
+    ADD 'Fuel Temp   ' <<TempF1>> MAP
+    REF 
+        'Bore ppm    ' 1.E-4
+        'CaloUp Temp ' SAMEASREF
+        'CaloDw Temp ' SAMEASREF
+        'CaloUp Dens ' SAMEASREF
+        'CaloDw Dens ' SAMEASREF
+        'Puissance   ' SAMEASREF
+        'burnup'       SAMEASREF
+    ENDREF 
+
+    ADD 'Puissance   ' <<Pui>> MAP
+    REF 
+        'Bore ppm    ' 1.E-4
+        'CaloUp Temp ' SAMEASREF
+        'CaloDw Temp ' SAMEASREF
+        'CaloUp Dens ' SAMEASREF
+        'CaloDw Dens ' SAMEASREF
+        'Fuel Temp   ' SAMEASREF
+        'burnup'       SAMEASREF
+    ENDREF 
+
+    ENDMIX 
+
+    TABLE dbref_03s 'Rep_03S'  'burnup'
+    MIX 8 
+    SET CUBIC  'Bore ppm    ' 1.E-4
+    SET CUBIC  'CaloUp Dens ' <<DensCU1>>
+    SET CUBIC  'CaloDw Dens ' <<DensCD1>>
+    SET CUBIC  'Fuel Temp   ' <<TempF1>>
+    SET CUBIC  'CaloUp Temp ' <<TempCU1>>
+    SET CUBIC  'CaloDw Temp ' <<TempCD1>>
+    SET CUBIC  'Puissance   ' <<Pui>>
+
+    ADD 'CaloDw Dens ' <<DensCD1>> MAP
+    REF 
+        'Bore ppm    ' 1.E-4
+        'CaloUp Temp ' SAMEASREF
+        'Fuel Temp   ' SAMEASREF
+        'CaloUp Dens ' SAMEASREF
+        'CaloDw Temp ' SAMEASREF
+        'Puissance   ' SAMEASREF
+        'burnup'       SAMEASREF
+    ENDREF 
+
+    ADD 'CaloDw Temp ' <<TempCD1>> MAP
+    REF 
+        'Bore ppm    ' 1.E-4
+        'CaloUp Temp ' SAMEASREF
+        'Fuel Temp   ' SAMEASREF
+        'CaloUp Dens ' SAMEASREF
+        'CaloDw Dens ' SAMEASREF
+        'Puissance   ' SAMEASREF
+        'burnup'       SAMEASREF
+    ENDREF 
+ 
+
+ADD 'Bore ppm    ' 1.E-4 <<ppmB>>
+    REF 
+        'CaloUp Dens ' SAMEASREF
+        'CaloUp Temp ' SAMEASREF
+        'Fuel Temp   ' SAMEASREF
+        'CaloDw Dens ' SAMEASREF
+        'CaloDw Temp ' SAMEASREF
+        'Puissance   ' SAMEASREF
+        'burnup'       SAMEASREF
+    ENDREF 
+
+    ADD 'CaloUp Dens ' <<DensCU1>> MAP
+    REF 
+        'Bore ppm    ' 1.E-4
+        'CaloUp Temp ' SAMEASREF
+        'Fuel Temp   ' SAMEASREF
+        'CaloDw Dens ' SAMEASREF
+        'CaloDw Temp ' SAMEASREF
+        'Puissance   ' SAMEASREF
+        'burnup'       SAMEASREF
+    ENDREF 
+
+
+
+    ADD 'CaloUp Temp ' <<TempCU1>> MAP
+    REF 
+        'Bore ppm    ' 1.E-4
+        'CaloUp Dens ' SAMEASREF
+        'Fuel Temp   ' SAMEASREF
+        'CaloDw Dens ' SAMEASREF
+        'CaloDw Temp ' SAMEASREF
+        'Puissance   ' SAMEASREF
+        'burnup'       SAMEASREF
+    ENDREF 
+    
+    ADD 'Fuel Temp   ' <<TempF1>> MAP
+    REF 
+        'Bore ppm    ' 1.E-4
+        'CaloUp Temp ' SAMEASREF
+        'CaloDw Temp ' SAMEASREF
+        'CaloUp Dens ' SAMEASREF
+        'CaloDw Dens ' SAMEASREF
+        'Puissance   ' SAMEASREF
+        'burnup'       SAMEASREF
+    ENDREF 
+
+    ADD 'Puissance   ' <<Pui>> MAP
+    REF 
+        'Bore ppm    ' 1.E-4
+        'CaloUp Temp ' SAMEASREF
+        'CaloDw Temp ' SAMEASREF
+        'CaloUp Dens ' SAMEASREF
+        'CaloDw Dens ' SAMEASREF
+        'Fuel Temp   ' SAMEASREF
+        'burnup'       SAMEASREF
+    ENDREF 
+
+    ENDMIX 
+
+    TABLE dbref_03c 'Rep_03C'  'burnup'
+    MIX 11 
+    SET CUBIC  'Bore ppm    ' 1.E-4
+    SET CUBIC  'CaloUp Dens ' <<DensCU1>>
+    SET CUBIC  'CaloDw Dens ' <<DensCD1>>
+    SET CUBIC  'Fuel Temp   ' <<TempF1>>
+    SET CUBIC  'CaloUp Temp ' <<TempCU1>>
+    SET CUBIC  'CaloDw Temp ' <<TempCD1>>
+    SET CUBIC  'Puissance   ' <<Pui>>
+
+    ADD 'CaloDw Dens ' <<DensCD1>> MAP
+    REF 
+        'Bore ppm    ' 1.E-4
+        'CaloUp Temp ' SAMEASREF
+        'Fuel Temp   ' SAMEASREF
+        'CaloUp Dens ' SAMEASREF
+        'CaloDw Temp ' SAMEASREF
+        'Puissance   ' SAMEASREF
+        'burnup'       SAMEASREF
+    ENDREF 
+
+    ADD 'CaloDw Temp ' <<TempCD1>> MAP
+    REF 
+        'Bore ppm    ' 1.E-4
+        'CaloUp Temp ' SAMEASREF
+        'Fuel Temp   ' SAMEASREF
+        'CaloUp Dens ' SAMEASREF
+        'CaloDw Dens ' SAMEASREF
+        'Puissance   ' SAMEASREF
+        'burnup'       SAMEASREF
+    ENDREF 
+ 
+
+ADD 'Bore ppm    ' 1.E-4 <<ppmB>>
+    REF 
+        'CaloUp Dens ' SAMEASREF
+        'CaloUp Temp ' SAMEASREF
+        'Fuel Temp   ' SAMEASREF
+        'CaloDw Dens ' SAMEASREF
+        'CaloDw Temp ' SAMEASREF
+        'Puissance   ' SAMEASREF
+        'burnup'       SAMEASREF
+    ENDREF 
+
+    ADD 'CaloUp Dens ' <<DensCU1>> MAP
+    REF 
+        'Bore ppm    ' 1.E-4
+        'CaloUp Temp ' SAMEASREF
+        'Fuel Temp   ' SAMEASREF
+        'CaloDw Dens ' SAMEASREF
+        'CaloDw Temp ' SAMEASREF
+        'Puissance   ' SAMEASREF
+        'burnup'       SAMEASREF
+    ENDREF 
+
+
+
+    ADD 'CaloUp Temp ' <<TempCU1>> MAP
+    REF 
+        'Bore ppm    ' 1.E-4
+        'CaloUp Dens ' SAMEASREF
+        'Fuel Temp   ' SAMEASREF
+        'CaloDw Dens ' SAMEASREF
+        'CaloDw Temp ' SAMEASREF
+        'Puissance   ' SAMEASREF
+        'burnup'       SAMEASREF
+    ENDREF 
+    
+    ADD 'Fuel Temp   ' <<TempF1>> MAP
+    REF 
+        'Bore ppm    ' 1.E-4
+        'CaloUp Temp ' SAMEASREF
+        'CaloDw Temp ' SAMEASREF
+        'CaloUp Dens ' SAMEASREF
+        'CaloDw Dens ' SAMEASREF
+        'Puissance   ' SAMEASREF
+        'burnup'       SAMEASREF
+    ENDREF 
+
+    ADD 'Puissance   ' <<Pui>> MAP
+    REF 
+        'Bore ppm    ' 1.E-4
+        'CaloUp Temp ' SAMEASREF
+        'CaloDw Temp ' SAMEASREF
+        'CaloUp Dens ' SAMEASREF
+        'CaloDw Dens ' SAMEASREF
+        'Fuel Temp   ' SAMEASREF
+        'burnup'       SAMEASREF
+    ENDREF 
+
+    ENDMIX     
+
+
+    TABLE dbref_45 'Rep_45'  'burnup'
+    MIX 3 
+    SET CUBIC  'Bore ppm    ' 1.E-4
+    SET CUBIC  'CaloUp Dens ' <<DensCU1>>
+    SET CUBIC  'CaloDw Dens ' <<DensCD1>>
+    SET CUBIC  'Fuel Temp   ' <<TempF1>>
+    SET CUBIC  'CaloUp Temp ' <<TempCU1>>
+    SET CUBIC  'CaloDw Temp ' <<TempCD1>>
+    SET CUBIC  'Puissance   ' <<Pui>>
+
+    ADD 'CaloDw Dens ' <<DensCD1>> MAP
+    REF 
+        'Bore ppm    ' 1.E-4
+        'CaloUp Temp ' SAMEASREF
+        'Fuel Temp   ' SAMEASREF
+        'CaloUp Dens ' SAMEASREF
+        'CaloDw Temp ' SAMEASREF
+        'Puissance   ' SAMEASREF
+        'burnup'       SAMEASREF
+    ENDREF 
+
+    ADD 'CaloDw Temp ' <<TempCD1>> MAP
+    REF 
+        'Bore ppm    ' 1.E-4
+        'CaloUp Temp ' SAMEASREF
+        'Fuel Temp   ' SAMEASREF
+        'CaloUp Dens ' SAMEASREF
+        'CaloDw Dens ' SAMEASREF
+        'Puissance   ' SAMEASREF
+        'burnup'       SAMEASREF
+    ENDREF 
+ 
+
+ADD 'Bore ppm    ' 1.E-4 <<ppmB>>
+    REF 
+        'CaloUp Dens ' SAMEASREF
+        'CaloUp Temp ' SAMEASREF
+        'Fuel Temp   ' SAMEASREF
+        'CaloDw Dens ' SAMEASREF
+        'CaloDw Temp ' SAMEASREF
+        'Puissance   ' SAMEASREF
+        'burnup'       SAMEASREF
+    ENDREF 
+
+    ADD 'CaloUp Dens ' <<DensCU1>> MAP
+    REF 
+        'Bore ppm    ' 1.E-4
+        'CaloUp Temp ' SAMEASREF
+        'Fuel Temp   ' SAMEASREF
+        'CaloDw Dens ' SAMEASREF
+        'CaloDw Temp ' SAMEASREF
+        'Puissance   ' SAMEASREF
+        'burnup'       SAMEASREF
+    ENDREF 
+
+
+
+    ADD 'CaloUp Temp ' <<TempCU1>> MAP
+    REF 
+        'Bore ppm    ' 1.E-4
+        'CaloUp Dens ' SAMEASREF
+        'Fuel Temp   ' SAMEASREF
+        'CaloDw Dens ' SAMEASREF
+        'CaloDw Temp ' SAMEASREF
+        'Puissance   ' SAMEASREF
+        'burnup'       SAMEASREF
+    ENDREF 
+    
+    ADD 'Fuel Temp   ' <<TempF1>> MAP
+    REF 
+        'Bore ppm    ' 1.E-4
+        'CaloUp Temp ' SAMEASREF
+        'CaloDw Temp ' SAMEASREF
+        'CaloUp Dens ' SAMEASREF
+        'CaloDw Dens ' SAMEASREF
+        'Puissance   ' SAMEASREF
+        'burnup'       SAMEASREF
+    ENDREF 
+
+    ADD 'Puissance   ' <<Pui>> MAP
+    REF 
+        'Bore ppm    ' 1.E-4
+        'CaloUp Temp ' SAMEASREF
+        'CaloDw Temp ' SAMEASREF
+        'CaloUp Dens ' SAMEASREF
+        'CaloDw Dens ' SAMEASREF
+        'Fuel Temp   ' SAMEASREF
+        'burnup'       SAMEASREF
+    ENDREF 
+
+    ENDMIX 
+
+    TABLE dbref_45s 'Rep_45S'  'burnup'
+    MIX 6 
+    SET CUBIC  'Bore ppm    ' 1.E-4
+    SET CUBIC  'CaloUp Dens ' <<DensCU1>>
+    SET CUBIC  'CaloDw Dens ' <<DensCD1>>
+    SET CUBIC  'Fuel Temp   ' <<TempF1>>
+    SET CUBIC  'CaloUp Temp ' <<TempCU1>>
+    SET CUBIC  'CaloDw Temp ' <<TempCD1>>
+    SET CUBIC  'Puissance   ' <<Pui>>
+
+    ADD 'CaloDw Dens ' <<DensCD1>> MAP
+    REF 
+        'Bore ppm    ' 1.E-4
+        'CaloUp Temp ' SAMEASREF
+        'Fuel Temp   ' SAMEASREF
+        'CaloUp Dens ' SAMEASREF
+        'CaloDw Temp ' SAMEASREF
+        'Puissance   ' SAMEASREF
+        'burnup'       SAMEASREF
+    ENDREF 
+
+    ADD 'CaloDw Temp ' <<TempCD1>> MAP
+    REF 
+        'Bore ppm    ' 1.E-4
+        'CaloUp Temp ' SAMEASREF
+        'Fuel Temp   ' SAMEASREF
+        'CaloUp Dens ' SAMEASREF
+        'CaloDw Dens ' SAMEASREF
+        'Puissance   ' SAMEASREF
+        'burnup'       SAMEASREF
+    ENDREF 
+ 
+
+ADD 'Bore ppm    ' 1.E-4 <<ppmB>>
+    REF 
+        'CaloUp Dens ' SAMEASREF
+        'CaloUp Temp ' SAMEASREF
+        'Fuel Temp   ' SAMEASREF
+        'CaloDw Dens ' SAMEASREF
+        'CaloDw Temp ' SAMEASREF
+        'Puissance   ' SAMEASREF
+        'burnup'       SAMEASREF
+    ENDREF 
+
+    ADD 'CaloUp Dens ' <<DensCU1>> MAP
+    REF 
+        'Bore ppm    ' 1.E-4
+        'CaloUp Temp ' SAMEASREF
+        'Fuel Temp   ' SAMEASREF
+        'CaloDw Dens ' SAMEASREF
+        'CaloDw Temp ' SAMEASREF
+        'Puissance   ' SAMEASREF
+        'burnup'       SAMEASREF
+    ENDREF 
+
+
+
+    ADD 'CaloUp Temp ' <<TempCU1>> MAP
+    REF 
+        'Bore ppm    ' 1.E-4
+        'CaloUp Dens ' SAMEASREF
+        'Fuel Temp   ' SAMEASREF
+        'CaloDw Dens ' SAMEASREF
+        'CaloDw Temp ' SAMEASREF
+        'Puissance   ' SAMEASREF
+        'burnup'       SAMEASREF
+    ENDREF 
+    
+    ADD 'Fuel Temp   ' <<TempF1>> MAP
+    REF 
+        'Bore ppm    ' 1.E-4
+        'CaloUp Temp ' SAMEASREF
+        'CaloDw Temp ' SAMEASREF
+        'CaloUp Dens ' SAMEASREF
+        'CaloDw Dens ' SAMEASREF
+        'Puissance   ' SAMEASREF
+        'burnup'       SAMEASREF
+    ENDREF 
+
+    ADD 'Puissance   ' <<Pui>> MAP
+    REF 
+        'Bore ppm    ' 1.E-4
+        'CaloUp Temp ' SAMEASREF
+        'CaloDw Temp ' SAMEASREF
+        'CaloUp Dens ' SAMEASREF
+        'CaloDw Dens ' SAMEASREF
+        'Fuel Temp   ' SAMEASREF
+        'burnup'       SAMEASREF
+    ENDREF 
+
+    ENDMIX 
+
+    TABLE dbref_45c 'Rep_45C'  'burnup'
+    MIX 9 
+    SET CUBIC  'Bore ppm    ' 1.E-4
+    SET CUBIC  'CaloUp Dens ' <<DensCU1>>
+    SET CUBIC  'CaloDw Dens ' <<DensCD1>>
+    SET CUBIC  'Fuel Temp   ' <<TempF1>>
+    SET CUBIC  'CaloUp Temp ' <<TempCU1>>
+    SET CUBIC  'CaloDw Temp ' <<TempCD1>>
+    SET CUBIC  'Puissance   ' <<Pui>>
+
+    ADD 'CaloDw Dens ' <<DensCD1>> MAP
+    REF 
+        'Bore ppm    ' 1.E-4
+        'CaloUp Temp ' SAMEASREF
+        'Fuel Temp   ' SAMEASREF
+        'CaloUp Dens ' SAMEASREF
+        'CaloDw Temp ' SAMEASREF
+        'Puissance   ' SAMEASREF
+        'burnup'       SAMEASREF
+    ENDREF 
+
+    ADD 'CaloDw Temp ' <<TempCD1>> MAP
+    REF 
+        'Bore ppm    ' 1.E-4
+        'CaloUp Temp ' SAMEASREF
+        'Fuel Temp   ' SAMEASREF
+        'CaloUp Dens ' SAMEASREF
+        'CaloDw Dens ' SAMEASREF
+        'Puissance   ' SAMEASREF
+        'burnup'       SAMEASREF
+    ENDREF 
+ 
+
+ADD 'Bore ppm    ' 1.E-4 <<ppmB>>
+    REF 
+        'CaloUp Dens ' SAMEASREF
+        'CaloUp Temp ' SAMEASREF
+        'Fuel Temp   ' SAMEASREF
+        'CaloDw Dens ' SAMEASREF
+        'CaloDw Temp ' SAMEASREF
+        'Puissance   ' SAMEASREF
+        'burnup'       SAMEASREF
+    ENDREF 
+
+    ADD 'CaloUp Dens ' <<DensCU1>> MAP
+    REF 
+        'Bore ppm    ' 1.E-4
+        'CaloUp Temp ' SAMEASREF
+        'Fuel Temp   ' SAMEASREF
+        'CaloDw Dens ' SAMEASREF
+        'CaloDw Temp ' SAMEASREF
+        'Puissance   ' SAMEASREF
+        'burnup'       SAMEASREF
+    ENDREF 
+
+
+
+    ADD 'CaloUp Temp ' <<TempCU1>> MAP
+    REF 
+        'Bore ppm    ' 1.E-4
+        'CaloUp Dens ' SAMEASREF
+        'Fuel Temp   ' SAMEASREF
+        'CaloDw Dens ' SAMEASREF
+        'CaloDw Temp ' SAMEASREF
+        'Puissance   ' SAMEASREF
+        'burnup'       SAMEASREF
+    ENDREF 
+    
+    ADD 'Fuel Temp   ' <<TempF1>> MAP
+    REF 
+        'Bore ppm    ' 1.E-4
+        'CaloUp Temp ' SAMEASREF
+        'CaloDw Temp ' SAMEASREF
+        'CaloUp Dens ' SAMEASREF
+        'CaloDw Dens ' SAMEASREF
+        'Puissance   ' SAMEASREF
+        'burnup'       SAMEASREF
+    ENDREF 
+
+    ADD 'Puissance   ' <<Pui>> MAP
+    REF 
+        'Bore ppm    ' 1.E-4
+        'CaloUp Temp ' SAMEASREF
+        'CaloDw Temp ' SAMEASREF
+        'CaloUp Dens ' SAMEASREF
+        'CaloDw Dens ' SAMEASREF
+        'Fuel Temp   ' SAMEASREF
+        'burnup'       SAMEASREF
+    ENDREF 
+
+    ENDMIX    ;
+
+END: ;
+QUIT "LIST" .
+

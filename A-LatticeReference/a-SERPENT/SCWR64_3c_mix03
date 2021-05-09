@@ -1,0 +1,200 @@
+% ---- SCWR --- 
+set title "SCWR-64 Elements 3cycles v2"
+% --- FUEL AND BURNABLE PINS : 
+pin 1
+fuel1 0.415
+clad  0.475
+coolout
+pin 2
+cons1 0.415
+clad  0.475
+coolout
+pin 3 
+fuel2 0.44
+clad  0.500
+coolout
+pin 4 
+cons2 0.44
+clad  0.500
+coolout
+% --- Lattice (2 rings, 32 elements each)
+lat 10 4 0.0 0.0 2
+32 5.400 0.0 1 1 2 1 1 1 2 1 1 1 2 1 1 1 2 1 1 1 2 1 1 1 2 1 1 1 2 1 1 1 2 1 
+32 6.575 0.0 4 3 3 3 4 3 3 3 4 3 3 3 4 3 3 3 4 3 3 3 4 3 3 3 4 3 3 3 4 3 3 3 
+% --- Surfaces 
+surf 1 cyl 0.0 0.0 4.60 %Coolant flow tube (inner wall)
+surf 2 cyl 0.0 0.0 4.70 %Coolant flow tube (outer wall) 
+surf 3 cyl 0.0 0.0 7.20 %Inner Liner tube (inner wall)
+surf 4 cyl 0.0 0.0 7.25 %Outer Liner tube (outer wall)
+surf 5 cyl 0.0 0.0 7.80 %Insulator (outer wall)
+surf 6 cyl 0.0 0.0 7.85 %Outer Liner Tuber (outer wall)
+surf 7 cyl 0.0 0.0 9.05 %Pressure tube (outer wall) 
+surf 8 sqc 0.0 0.0 12.5 %Moderator
+% --- Cells material filling
+cell 1 0 coolin          -1     %Central Coolant (H2O)
+cell 2 0 flowtube      1 -2     %Flow Tube (Zr-mod 310SS)
+cell 3 0 fill 10       2 -3     %Fuel lattice (PuO2/ThO2)
+cell 4 0 linertubei    3 -4     %LinerTube (Zr-mod 310SS)
+cell 5 0 insulator     4 -5     %Insulator (Zirconia)
+cell 6 0 linertubeo    5 -6     %OuterLinerTube (Excell Alloy)  
+cell 7 0 pressuretube  6 -7     %PressureTube  (Excell Alloy)
+cell 8 0 moderator     7 -8     %Moderator (D20)
+cell 9 0 outside       8        %Outside world
+% --- Central Coolant.
+mat coolin  -5.84373E-01 moder lwtrCin 1001 
+1001.06c  -1.118955E+01 %H1
+1002.06c  -3.489009E-03 %H2
+8016.06c  -8.880697E+01 %O16  
+% --- Back Coolant.
+mat coolout -2.624E-01 moder lwtrCout 1001 
+1001.09c  -1.118955E+01 %H1
+1002.09c  -3.489009E-03 %H2
+8016.09c  -8.880697E+01 %O16 
+% --- Flow Tube.  
+mat flowtube  -7.9 tmp 663.3
+6000.06c  -0.034  %C-nat
+14000.06c -0.51   %Si-nat
+25055.06c -0.74   %Mn55
+15031.06c -0.016  %P31 
+16000.06c -0.002  %S-nat
+28000.06c -20.82  %Ni-nat
+24000.06c -25.04  %Cr-nat
+26000.06c -51.738 %Fe-nat
+42000.06c -0.51   %Mo-nat
+40000.06c -0.59   %Zr-nat 
+% --- Inner Liner Tube. 
+mat linertubei -7.9 
+6000.06c  -0.034  %C-nat
+14000.06c -0.51   %Si-nat
+25055.06c -0.74   %Mn55
+15031.06c -0.016  %P31 
+16000.06c -0.002  %S-nat
+28000.06c -20.82  %Ni-nat
+24000.06c -25.04  %Cr-nat
+26000.06c -51.738 %Fe-nat
+42000.06c -0.51   %Mo-nat
+40000.06c -0.59   %Zr-nat 
+% --- Insulator.
+mat insulator -5.37 tmp 551.80
+40000.03c -66.63 %Zr-nat
+39089.03c -7.87  %Y89
+8016.03c  -25.5 %O16
+% --- Outer liner tube.
+mat linertubeo -6.52 tmp 414.94
+50000.03c -3.5  %Sn-nat
+42000.03c -0.8  %Mo-nat
+41093.03c -0.8  %Nb93
+40000.03c -94.9 %Zr-nat
+% --- Pressure tube. 
+mat pressuretube -6.52 tmp 414.94
+50000.03c -3.5  %Sn-nat
+42000.03c -0.8  %Mo-nat
+41093.03c -0.8  %Nb93
+40000.03c -94.9 %Zr-nat
+% --- Moderator.
+mat moderator -1.08509 moder lwtrM 1001 moder hwtrM 1002
+1001.03c  -1.681387E-02 %H1
+1002.03c  -2.008754E+01 %H2
+8016.03c  -7.989565E+01 %O16 
+5010.03c  -1.843094E-09 %B10
+5011.03c  -8.156906E-09 %B11
+% --- Fuel ring1, 0-3m (11.293 w% of Pu).
+mat fuel1 -9.91 tmp 1056.26 burn 6 
+94238.09c -3.1056E-01 %Pu238
+94239.09c -5.8680     %Pu239
+94240.09c -2.5929     %Pu240
+94241.09c -1.7199     %Pu241
+94242.09c -8.0180E-01 %Pu242
+90232.09c -7.6632E+01 %Th232
+8016.09c  -1.2075E+01 %O16
+% --- Burnable ring1, 0-3m (11.293 w% of Pu).
+mat cons1 -9.82 tmp 1056.26 burn 6
+94238.09c -3.0123E-01 %Pu238
+94239.09c -5.6917     %Pu239
+94240.09c -2.5150     %Pu240
+94241.09c -1.6683     %Pu241
+94242.09c -7.7773E-01 %Pu242
+90232.09c -7.4333E+01 %Th232
+8016.09c  -1.2110E+01 %O16
+64152.09c -5.0295E-03 %Gd-152
+64154.09c -5.5543E-02 %Gd-154
+64155.09c -3.7954E-01 %Gd-155
+64156.09c -5.2833E-01 %Gd-156
+64157.09c -4.0652E-01 %Gd-157
+64158.09c -6.4935E-01 %Gd-158
+64160.09c -5.7870E-01 %Gd-160
+% --- Fuel ring2, 0-3m (9.034 w% of Pu).
+mat fuel2 -9.87 tmp 1056.26 burn 6
+94238.09c -2.4843E-01 %Pu238
+94239.09c -4.6941     %Pu239
+94240.09c -2.0742     %Pu240
+94241.09c -1.3759     %Pu241
+94242.09c -6.4141E-01 %Pu242
+90232.09c -7.8882E+01 %Th232
+8016.09c  -1.2084E+01 %O16
+% --- Burnable ring2, 0-3m (8.764 w% of Pu).
+mat cons2 -9.79 tmp 1056.26 burn 6
+94238.09c -2.4101E-01 %Pu238
+94239.09c -4.5538     %Pu239
+94240.09c -2.0122     %Pu240
+94241.09c -1.3348     %Pu241
+94242.09c -6.2224E-01 %Pu242
+90232.09c -7.6515E+01 %Th232
+8016.09c  -1.2118E+01 %O16
+64152.09c -5.0295E-03 %Gd-152
+64154.09c -5.5543E-02 %Gd-154
+64155.09c -3.7954E-01 %Gd-155
+64156.09c -5.2833E-01 %Gd-156
+64157.09c -4.0652E-01 %Gd-157
+64158.09c -6.4935E-01 %Gd-158
+64160.09c -5.7870E-01 %Gd-160
+mat clad -7.9 tmp 723.22
+6000.06c  -0.034  %C-nat
+14000.06c -0.51   %Si-nat
+25055.06c -0.74   %Mn55
+15031.06c -0.016  %P31 
+16000.06c -0.002  %S-nat
+28000.06c -20.82  %Ni-nat
+24000.06c -25.04  %Cr-nat
+26000.06c -51.738 %Fe-nat
+42000.06c -0.51   %Mo-nat
+40000.06c -0.59   %Zr-nat 
+% --- Thermal scattering data for light and heavy water:
+therm lwtrCin lwe7.12t
+therm hwtrCin hwe7.12t
+
+therm lwtrCout lwe7.18t
+therm hwtrCout hwe6.18t
+
+therm lwtrM lwe7.00t
+therm hwtrM hwe7.00t
+% --- Cross section data library file path:
+set acelib "/home/nucl/serpent/xs/endfb7/sss_endfb7.data"
+set declib "/home/nucl/serpent/xs/endfb7/sss_endfb7.dec"
+set nfylib "/home/nucl/serpent/xs/endfb7/sss_endfb7.nfy"
+% --- Reflective boundary condition:
+set bc 2
+
+set gcu  0  %to carry out the homogenization
+set sym  4  %to reduce the statistical error
+
+% --- Inventories
+set inventory Xe-135 Pa-233 U-233 Th-232 Pu-238 Pu-239 Pu-240
+Pu-241 Pu-242 Gd Gd-152 Gd-154 Gd-155 Gd-156 Gd-157 Gd-158 Gd-160
+
+% --- Burnup calculation 4 cycles of 435 days
+% --- 1st cycle of 405 days (Power=57.61 MW/tonne)
+set powdens 5.761E-2    %in KW/g
+
+dep daytot
+1 5 10 20 30 40 50 70 90 110 130 150 
+200 250 300 350 400 435 445 455 465 
+475 485 505 525 545 565 585 635 685 
+735 785 835 870 880 890 900 910 920 
+940 960 980 1000 1020 1070 1120 1170
+1220 1270 1305 1315 1325 1335 1345 
+1355 1375 1395 1415 1435 1455 1505 
+1555 1605 1655 1705 1710  
+
+%--- Neutron population and criticality cycles:
+set pop 5000 500 50 1.0

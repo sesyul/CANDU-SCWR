@@ -1,0 +1,241 @@
+*Deck SCWR64Dc61b normal version
+*--------------------
+* Nom          : SCWR64Dc61b.x2m
+* Utilisation  : Fichier principal pour perturbation bore a 1 ppm 
+* Auteur       : U. Le Tennier 
+* Date         : 15/08/2019
+* Modifie      : /
+*
+*---------------------------
+* DECRIPTION DU PROGRAMME
+* Realisation de perturbations pour la densite du caloporteur descendant  
+* 64 crayons de combustible et 6 rayons dans les crayons 
+*
+* PROCEDURES
+* SCWR64Geor6 SCWR64Libc6 SCWR64Evop6
+*
+* FICHIERS DE SORTIE 
+* EditPer03__        
+* EditPer34__      
+* EditPer45__
+*
+* FICHIERS ECHANGES 
+* VolumFlux     : Tracking pour le flux
+* VolumAutoPro   : Tracking pour l autoprotection
+* EditPer       : Fichier d edition perturbe contenant les informations pour ajouter dans une multicompo  
+* ConcIso       : Concentration isotopique en fonction du temps recuperee d EVO: en fonctionnement nominal
+* BiblioPer     : Bibliotheque perturbee 
+* LignFlux      : Lignes d integrations pour le flux perturbe 
+* LignAutoPro    : Lignes d integrations pour l autoprotection perturbe 
+*
+* VARIABLES ECHANGES 
+* ITERATION     : Indice pour determiner l enrichissement a realiser 
+* NbEtapes      : Nombre d iterations necessaires pour le calcul d evolution 
+* Puissance     : Puissance de grappe               (kW/kg)
+* DensCaloUp    : Densite du caloporteur ascendant  (g/cm3)
+* DensCaloDw    : Densite du caloporteur descendant (g/cm3)
+* DensMod       : Densite du moderateur             (g/cm3)
+* ConcBore      : Quantite de bore a ajouter au mod (%mass) 
+* TempFuel      : Temperature du combustible        (K)
+* TempMod       : Temperature du moderateur         (K)
+* TempCaloUp    : Temperature du caloporteur asc    (K)
+* TempCaloDw    : Temperature du caloporteur dsc    (K) 
+*
+*
+* VARIABLES LOCALES
+* BINAIRE      : Condition de sortie si les 3 enrichissments ont ete traites 
+* DensCaloMax  : Densite maximale du calopoteur     (g/cm3)
+* DensCaloMin  : Densite minimale du calopoteur     (g/cm3)
+* NbPasPert    : Nombre de pas a considerer pour perturber la grandeur 
+* PasPert      : Pas de perturbation                (g/cm3)
+*
+* 1 = bottom 0-3m
+* 2 = middle 3-4m
+* 3 = top    4-5m
+*
+* 
+*---------------------------------------------------------------
+* Definition des modules, procédures et structures de données
+*---------------------------------------------------------------
+MODULE        DELETE: END: GREP: RECOVER: UTL:   NXT:         ;
+
+PROCEDURE     SCWR64Geor6 SCWR64Libc6 SCWR64Evop6             ;
+LINKED_LIST   GeoAutoPro GeoFlux                              ;
+LINKED_LIST   VolumAutoPro VolumFlux                          ;
+LINKED_LIST   EditPer ConcIso                                 ;
+LINKED_LIST   BiblioPer                                       ;
+SEQ_ASCII     ConcIso03 ConcIso34 ConcIso45                   ;
+SEQ_ASCII     EditPer03B        :: FILE './EdiPer03DCd'    ;
+SEQ_ASCII     EditPer34B        :: FILE './EdiPer34DCd'    ;
+SEQ_ASCII     EditPer45B        :: FILE './EdiPer45DCd'    ;
+
+SEQ_BINARY    LignAutoPro LignFlux                             ;
+
+INTEGER       ITERATION       := 1                            ;
+INTEGER       ITERATIONref    := 1                            ;
+
+INTEGER       Maillage        := 172                          ;
+INTEGER       NbEtapes                                        ;
+REAL          Puissance       := 57.61                        ;
+REAL          TempCaloUp    :=  671.10                        ;
+REAL          TempCaloDw    :=  634.62625                     ; 
+REAL          DensCaloUp    :=    0.2624                      ; 
+REAL          DensCaloDw    :=    0.584373                    ; 
+REAL          DensMod       :=    1.0851                      ; 
+REAL          TempFuel      := 1056.26                        ;
+REAL          TempMod       :=  342.16                        ;
+REAL          TempLiner     :=  663.30                        ;
+REAL          TempTubFrc    :=  414.94                        ;
+REAL          TempGaine     :=  723.22                        ;
+REAL          TempIsol      :=  551.80                        ;
+REAL          ConcBore      :=    1.E-4                       ;
+
+INTEGER       NbPert Ipert := 4  1                             ;
+REAL          DCaloDw1       :=    0.630                       ;
+REAL          DCaloDw2       :=    0.530                       ;
+REAL          DCaloDw3       :=    0.430                       ;
+REAL          DCaloDw4       :=    0.230                       ;
+REAL          DCaloDw                                          ;
+*---------------------------------------------------------------
+* Note GM
+* Definition des geometries (une seule fois)
+*---------------------------------------------------------------
+GeoAutoPro GeoFlux := SCWR64Geor6 ;
+*---------------------------------------------------------------
+* Definition des geometries a analyser
+*---------------------------------------------------------------
+VolumAutoPro LignAutoPro := NXT: GeoAutoPro :: EDIT 2 TISO 9 75.0 ;
+VolumFlux    LignFlux    := NXT: GeoFlux    :: EDIT 2 TISO 9 75.0 ;
+GeoAutoPro GeoFlux := DELETE: GeoAutoPro GeoFlux ;
+
+*---------------------------------------------------------------
+* Debut de boucle while et choix des fichiers/valeurs en fonction de l enrichissement
+*---------------------------------------------------------------
+WHILE ITERATION ITERATIONref <= DO
+
+IF ITERATION 2 = THEN 
+    
+    ConcIso := ConcIso34                                   ;
+
+    EVALUATE  TempCaloUp    :=  772.14                     ;
+    EVALUATE  TempCaloDw    :=  630.3776                   ;
+    EVALUATE  DensCaloUp    :=    0.09515                  ;
+    EVALUATE  DensCaloDw    :=    0.600204                 ;
+    EVALUATE  TempFuel      := 1319.40                     ;
+    EVALUATE  TempLiner     :=  752.53                     ;
+    EVALUATE  TempTubFrc    :=  432.02                     ;
+    EVALUATE  TempGaine     :=  905.87                     ;
+    EVALUATE  TempIsol      :=  607.13                     ;
+
+    ECHO "Proprietes de 3 a 4m "                           ;
+
+ELSEIF ITERATION 3 = THEN 
+
+    ConcIso := ConcIso45                                   ;
+
+
+    EVALUATE  TempCaloUp    :=  858.85                     ;
+    EVALUATE  TempCaloDw    :=  626.9835                   ;
+    EVALUATE  DensCaloUp    :=    0.073707                 ;
+    EVALUATE  DensCaloDw    :=    0.612943                 ;
+    EVALUATE  TempFuel      := 1429.44                     ;
+    EVALUATE  TempLiner     :=  830.97                     ;
+    EVALUATE  TempTubFrc    :=  447.55                     ;
+    EVALUATE  TempGaine     := 1002.23                     ;
+    EVALUATE  TempIsol      :=  655.61                     ;
+
+    ECHO "Proprietes de 4 a 5m "                           ;
+
+ELSE
+
+    ConcIso := ConcIso03                                   ;
+
+    ECHO "Proprietes de 0 a 3m "                           ;
+
+ENDIF                                                      ;
+
+*---------------------------------------------------------------
+* Recuperation du nombre d etapes de burnup 
+*---------------------------------------------------------------
+GREP: ConcIso :: GETVAL 'STATE-VECTOR' 3 >>NbEtapes<<      ;
+*-----------------------------
+* Perturbations max   
+*-----------------------------
+WHILE Ipert NbPert <= DO 
+
+      IF Ipert 1 = THEN 
+         EVALUATE DCaloDw := DCaloDw1 ;
+      ELSEIF Ipert 2 = THEN  
+         EVALUATE DCaloDw := DCaloDw2 ;
+      ELSEIF Ipert 3 = THEN  
+         EVALUATE DCaloDw := DCaloDw3 ;
+      ELSE
+         EVALUATE DCaloDw := DCaloDw4 ;
+      ENDIF  ;     
+
+*----------------
+* Creation de bibliotheque interne reference avec valeur perturbee 
+*----------------
+      BiblioPer := SCWR64Libc6  :: <<ITERATION>>
+                              <<TempCaloUp>> <<TempCaloDw>> 
+                              <<DensCaloUp>> <<DCaloDw>>
+                              <<TempFuel>>   <<TempLiner>>   
+                              <<TempTubFrc>> <<TempMod>>
+                              <<TempGaine>>  <<TempIsol>>   
+                              <<DensMod>>    <<ConcBore>>   
+                              <<Maillage>>                   ;
+
+      IF Ipert 1 = THEN 
+
+      EditPer         := SCWR64Evop6   VolumAutoPro  VolumFlux  ConcIso 
+      BiblioPer LignAutoPro LignFlux   ::  <<ITERATION>>  <<NbEtapes>>    
+      <<Ipert>>     <<Puissance>>     <<DensCaloUp>>     <<DCaloDw>> 
+      <<DensMod>>      <<ConcBore>>       <<TempFuel>>    <<TempMod>> 
+      <<TempCaloUp>>   <<TempCaloDw>>                                 ;
+
+      ELSE 
+
+      EditPer           := SCWR64Evop6  EditPer VolumAutoPro VolumFlux 
+      ConcIso BiblioPer LignAutoPro LignFlux         :: <<ITERATION>>    
+      <<NbEtapes>>     <<Ipert>>     <<Puissance>>    <<DensCaloUp>> 
+      <<DCaloDw>>      <<DensMod>>     <<ConcBore>>  <<TempFuel>>  
+      <<TempMod>> <<TempCaloUp>> <<TempCaloDw>>                       ;
+
+      ENDIF                                                           ;
+
+      BiblioPer   := DELETE: BiblioPer                                ;
+      EVALUATE  Ipert     := Ipert 1 +   ;
+
+ENDWHILE                                                              ;
+
+EVALUATE  Ipert     :=  1  ;
+
+*---------------
+* Sauvegarde de la base de donnees 
+*---------------
+
+IF     ITERATION 1 = THEN
+    EditPer03B  := EditPer           ;
+ELSEIF ITERATION 2 = THEN
+    EditPer34B  := EditPer           ;
+ELSE 
+    EditPer45B  := EditPer           ;
+ENDIF                                  ;
+
+*---------------
+* Nettoyage pour pouvoir faire l enrichissement suivant
+*---------------
+ ConcIso EditPer       := DELETE: ConcIso EditPer           ;
+
+*---------------------------------------------------------------
+* Fin de boucle while
+*---------------------------------------------------------------
+EVALUATE ITERATION := ITERATION 1 +                        ;
+
+ENDWHILE                                                   ;
+LignAutoPro LignFlux   := DELETE: LignAutoPro LignFlux     ;
+VolumAutoPro VolumFlux := DELETE: VolumAutoPro VolumFlux   ;
+
+
+END: ;
+QUIT "LIST" .

@@ -1,0 +1,1679 @@
+*Deck EvolCelluleSCWR2D normal version 
+*--------------------
+* Nom          : SCWR64Evo.c2m
+* Utilisation  : Calcul de flux d autoprotection et d evolution
+* Auteur       : U. Le Tennier 
+* Date         : 28/05/2019
+* Modifier     : /
+*
+*---------------------------
+* DESCRIPTION DE LA PROCEDURE
+* Realisation de l autoprotection 
+* Realisation du calcul de flux 
+* Remplissage des multicompos 
+* Realisation du calcul d evolution  
+* 64 crayons de combustible
+*
+* Editing2 ConcIso Flux dbXXX dbRef := SCWR64Evo [dbRef]
+*   VolumAutoPro VolumFlux BiblioInt LignAutoPro LignFlux 
+*   :: <<Puissance>> <<ITERATION>> <<LoadModel>> <<TempsFin>> <<DensCaloUp>>   
+*    <<DensCaloDw>> <<DensMod>> <<ConcBore>> <<TempFuel>>
+*    <<TempMod>> <<TempCaloUp>> <<TempCaloDw>>               ;
+*
+* FICHIERS ECHANGES 
+* Editing2      : Sortie de EDI: pour tracer l évolution des isotopes
+* ConcIso       : Concentration isotopique en fonction du temps
+* Flux          : Fichier de flux 
+* dbXXX         : Multicompo soit du top, middle (mid) ou bottom (bot)
+* dbRef         : Compo contenant les donnees reflecteur, contient l export de CompoRefl
+* VolumFlux     : Tracking pour le flux
+* VolumAutoPro  : Tracking pour l autoprotection
+* BiblioInt     : Fichier MicroLib (bibli de sections efficaces) 
+* LignFlux      : Ligne d integration pour le flux
+* LignAutoPro   : Ligne d integration pour l autoprotection 
+*
+* FICHIERS INTERNES
+* CompoDb       : Multicompo interne, va etre copiee dans dbRef
+* PIJ           : Fichier de matrice PIJ 
+* BiblioTmp     : Bibliotheque une fois l autorprotection realisee
+* CompoRefl     : Compo contenant les donnees reflecteur, sera exportee dans dbRef 
+*
+* REELS ET ENTIERS
+* Puissance     : Puissance de grappe        (kW/kg)
+* TempsFin      : Burnup total que l on vise (jours)
+* ARRET         : Binaire qui determine si le reacteur est a l arret ou non 
+* ITERATION     : Indice pour determiner l enrichissement a utiliser
+*
+* NbEtapes      : Nombre d itérations necessaires pour le calcul d evolution
+* keff          : Facteur de multiplication effectif
+* FinEvo        : Binaire pour sortir de la boucle d evolution quand TempsFin est atteint
+* iBurn         : Indice d avencement du burnup  
+* dBurn         : Pas de burnup a incrementer a chaque iteration  
+* Delt          : Pas de temps correspondant au pas de burnup a puissnace donnee 
+* NbJours       : Nombre de jours cumules d avancement  
+*
+* STRING
+* RepCompo      : Nom du repertoire a considerer pour la multicompo
+*     
+*     AVANCEMENT DU BURNUP 
+*
+*     a) Puissance
+*        fournie en entree en supposant 3*405 jours
+*     b) Intervalles de temps pour le burnup
+*        =     1 jour  de    0 jusque    1 jour
+*        =     4 jours de    1 jusque    5 jours
+*        =     5 jours de    5 jusque   10 jours
+*        =    10 jours de   10 jusque   50 jours
+*        =    20 jours de   50 jusque  150 jours
+*        =    50 jours de  150 jusque  400 jours
+*        =     5 jours de  400 jusque  405 jours 
+*        =    30 jours de  405 jusque  435 jours (rechargement, puissance à 0.)
+*     c) Jours avec changement de frequence d echantillonage 
+*        = 1.0, 5.0, 10.0, 50.0, 150.0 400.0 405.0 et 435.0 jours
+*     d) Repetition du cycle 4 fois pour arriver a 1740.0 jours au total 
+*
+*------
+* Definition des structures de donnees a echanger
+*------
+PARAMETER dbCorXXX dbCornXXX dbSid1XXX dbSid2XXX dbRef1 dbRef2   
+ConcIso Editing Editing2 Editing3 VolumAutoPA VolumAutoPB 
+VolumAutoPC VolumFluS BiblioInt
+LignAutoPA  LignAutoPB  LignAutoPC LignFluS    :: 
+    ::: SEQ_ASCII      dbCorXXX dbCornXXX                 ;
+    ::: SEQ_ASCII      dbSid1XXX dbSid2XXX dbRef1 dbRef2  ;
+    ::: LINKED_LIST    ConcIso Editing Editing2 Editing3  ;
+    ::: LINKED_LIST    VolumAutoPA VolumAutoPB            ;
+    ::: LINKED_LIST    VolumAutoPC VolumFluS              ;
+    ::: LINKED_LIST    BiblioInt                          ;
+    ::: SEQ_BINARY     LignAutoPA   LignAutoPB            ;
+    ::: SEQ_BINARY     LignAutoPC   LignFluS              ; ;
+
+*------
+* Definition des modules, procedures et structures de données locales
+*------
+MODULE SHI: ASM: FLU: EDI: EVO: GREP: DELETE: COMPO: END: CPO:      ;
+LINKED_LIST CompoDbCorn CompoDbSid1 CompoDbCor CompoDbSid2          ;
+LINKED_LIST BiblioTmp CompoRefl1 CompoRefl2  EditR1 EditR2          ;
+LINKED_LIST PIJ Flux Editing4                                       ;
+
+*------
+* Recuperation d information transmise a la procedure 
+*------
+REAL Puissance                                 ;
+:: >>Puissance<<                               ;
+INTEGER ITERATION                              ;
+:: >>ITERATION<<                               ;
+REAL TempsFin     DensCaloUp     DensCaloDw    ;
+:: >>TempsFin<< >>DensCaloUp<< >>DensCaloDw<<  ;
+REAL DensMod     ConcBore       TempFuel       ;
+:: >>DensMod<< >>ConcBore<<   >>TempFuel<<     ;
+REAL TempMod     TempCaloUp     TempCaloDw     ;
+:: >>TempMod<< >>TempCaloUp<< >>TempCaloDw<<   ;
+STRING   LoadModel      Opt                    ;
+::     >>LoadModel<<  >>Opt<<                  ;
+
+*------
+* Definition du reste des variables internes
+*------
+INTEGER     NbEtapes  := 0                  ;
+INTEGER     ARRET     := 0                  ;
+INTEGER     NumEtape  := 0                  ;
+
+REAL        keff                            ;
+REAL        iBurn     := 0.                 ;
+REAL        dBurn                           ;
+REAL        Delt      := 1.                 ;
+REAL        NbJours   := 0.                 ;
+
+REAL    Sigma1 Sigma2 Sigma3 SigmaF1 SigmaF2 SigmaF3    ;
+
+STRING      RepCompo                        ;
+STRING      Rep                                         ;
+
+*-------
+* Creation de la multicompo pour chacun des trois cas
+*-------
+IF     ITERATION 1 = THEN
+
+EVALUATE      RepCompo       := 'Rep_03'                  ;
+
+CompoDbCor := COMPO:                      :: 
+        EDIT 0
+        STEP UP <<RepCompo>>
+        COMM 'SCWR64 03 Cor'         ENDC
+        PARA 'burnup'                 IRRA
+        PARA 'Puissance'   VALU REAL
+        PARA 'CaloUp Dens' VALU REAL
+        PARA 'CaloDw Dens' VALU REAL 
+        PARA 'Mod Dens'    VALU REAL
+        PARA 'Bore ppm'    VALU REAL   
+        PARA 'Fuel Temp'   VALU REAL
+        PARA 'Mod Temp'    VALU REAL
+        PARA 'CaloUp Temp' VALU REAL
+        PARA 'CaloDw Temp' VALU REAL
+        ISOT 3 'U233' 'Pa233' 'Th232'
+        INIT                                                          ;
+
+CompoDbCorn := COMPO:                      :: 
+        EDIT 0
+        STEP UP <<RepCompo>>
+        COMM 'SCWR64 03 Corn'         ENDC
+        PARA 'burnup'                 IRRA
+        PARA 'Puissance'   VALU REAL
+        PARA 'CaloUp Dens' VALU REAL
+        PARA 'CaloDw Dens' VALU REAL 
+        PARA 'Mod Dens'    VALU REAL
+        PARA 'Bore ppm'    VALU REAL   
+        PARA 'Fuel Temp'   VALU REAL
+        PARA 'Mod Temp'    VALU REAL
+        PARA 'CaloUp Temp' VALU REAL
+        PARA 'CaloDw Temp' VALU REAL
+        ISOT 3 'U233' 'Pa233' 'Th232'
+        INIT                                                          ;
+
+CompoDbSid1 := COMPO:                      :: 
+        EDIT 0
+        STEP UP <<RepCompo>>
+        COMM 'SCWR64 03 S1'         ENDC
+        PARA 'burnup'                 IRRA
+        PARA 'Puissance'   VALU REAL
+        PARA 'CaloUp Dens' VALU REAL
+        PARA 'CaloDw Dens' VALU REAL 
+        PARA 'Mod Dens'    VALU REAL
+        PARA 'Bore ppm'    VALU REAL   
+        PARA 'Fuel Temp'   VALU REAL
+        PARA 'Mod Temp'    VALU REAL
+        PARA 'CaloUp Temp' VALU REAL
+        PARA 'CaloDw Temp' VALU REAL
+        ISOT 3 'U233' 'Pa233' 'Th232'
+        INIT                                                          ;
+
+CompoDbSid2 := COMPO:                      :: 
+        EDIT 0
+        STEP UP <<RepCompo>>
+        COMM 'SCWR64 03 S2'         ENDC
+        PARA 'burnup'                 IRRA
+        PARA 'Puissance'   VALU REAL
+        PARA 'CaloUp Dens' VALU REAL
+        PARA 'CaloDw Dens' VALU REAL 
+        PARA 'Mod Dens'    VALU REAL
+        PARA 'Bore ppm'    VALU REAL   
+        PARA 'Fuel Temp'   VALU REAL
+        PARA 'Mod Temp'    VALU REAL
+        PARA 'CaloUp Temp' VALU REAL
+        PARA 'CaloDw Temp' VALU REAL
+        ISOT 3 'U233' 'Pa233' 'Th232'
+        INIT                                                          ;
+
+
+ECHO "Creation de la multicompo 03"                                   ;
+
+ELSEIF ITERATION 2 = THEN 
+
+EVALUATE RepCompo := 'Rep_34'                                         ;
+
+CompoDbCor := COMPO:                      :: 
+        EDIT 0
+        STEP UP <<RepCompo>>
+        COMM 'SCWR64 34 Cor'         ENDC
+        PARA 'burnup'                 IRRA
+        PARA 'Puissance'   VALU REAL
+        PARA 'CaloUp Dens' VALU REAL
+        PARA 'CaloDw Dens' VALU REAL 
+        PARA 'Mod Dens'    VALU REAL
+        PARA 'Bore ppm'    VALU REAL   
+        PARA 'Fuel Temp'   VALU REAL
+        PARA 'Mod Temp'    VALU REAL
+        PARA 'CaloUp Temp' VALU REAL
+        PARA 'CaloDw Temp' VALU REAL
+        ISOT 3 'U233' 'Pa233' 'Th232'
+        INIT                                                          ;
+
+CompoDbCorn := COMPO:                      :: 
+        EDIT 0
+        STEP UP <<RepCompo>>
+        COMM 'SCWR64 34 Corn'         ENDC
+        PARA 'burnup'                 IRRA
+        PARA 'Puissance'   VALU REAL
+        PARA 'CaloUp Dens' VALU REAL
+        PARA 'CaloDw Dens' VALU REAL 
+        PARA 'Mod Dens'    VALU REAL
+        PARA 'Bore ppm'    VALU REAL   
+        PARA 'Fuel Temp'   VALU REAL
+        PARA 'Mod Temp'    VALU REAL
+        PARA 'CaloUp Temp' VALU REAL
+        PARA 'CaloDw Temp' VALU REAL
+        ISOT 3 'U233' 'Pa233' 'Th232'
+        INIT                                                          ;
+
+CompoDbSid1 := COMPO:                      :: 
+        EDIT 0
+        STEP UP <<RepCompo>>
+        COMM 'SCWR64 34 S1'         ENDC
+        PARA 'burnup'                 IRRA
+        PARA 'Puissance'   VALU REAL
+        PARA 'CaloUp Dens' VALU REAL
+        PARA 'CaloDw Dens' VALU REAL 
+        PARA 'Mod Dens'    VALU REAL
+        PARA 'Bore ppm'    VALU REAL   
+        PARA 'Fuel Temp'   VALU REAL
+        PARA 'Mod Temp'    VALU REAL
+        PARA 'CaloUp Temp' VALU REAL
+        PARA 'CaloDw Temp' VALU REAL
+        ISOT 3 'U233' 'Pa233' 'Th232'
+        INIT                                                          ;
+
+CompoDbSid2 := COMPO:                      :: 
+        EDIT 0
+        STEP UP <<RepCompo>>
+        COMM 'SCWR64 34 S2'         ENDC
+        PARA 'burnup'                 IRRA
+        PARA 'Puissance'   VALU REAL
+        PARA 'CaloUp Dens' VALU REAL
+        PARA 'CaloDw Dens' VALU REAL 
+        PARA 'Mod Dens'    VALU REAL
+        PARA 'Bore ppm'    VALU REAL   
+        PARA 'Fuel Temp'   VALU REAL
+        PARA 'Mod Temp'    VALU REAL
+        PARA 'CaloUp Temp' VALU REAL
+        PARA 'CaloDw Temp' VALU REAL
+        ISOT 3 'U233' 'Pa233' 'Th232'
+        INIT                                                          ;
+
+ECHO "Creation de la multicompo 34"                                   ;
+
+ELSE 
+
+EVALUATE RepCompo := 'Rep_45'                                         ;
+
+CompoDbCor := COMPO:                      :: 
+        EDIT 0
+        STEP UP <<RepCompo>>
+        COMM 'SCWR64 45 Cor'         ENDC
+        PARA 'burnup'                 IRRA
+        PARA 'Puissance'   VALU REAL
+        PARA 'CaloUp Dens' VALU REAL
+        PARA 'CaloDw Dens' VALU REAL 
+        PARA 'Mod Dens'    VALU REAL
+        PARA 'Bore ppm'    VALU REAL   
+        PARA 'Fuel Temp'   VALU REAL
+        PARA 'Mod Temp'    VALU REAL
+        PARA 'CaloUp Temp' VALU REAL
+        PARA 'CaloDw Temp' VALU REAL
+        ISOT 3 'U233' 'Pa233' 'Th232'
+        INIT                                                          ;
+
+CompoDbCorn := COMPO:                      :: 
+        EDIT 0
+        STEP UP <<RepCompo>>
+        COMM 'SCWR64 45 Corn'         ENDC
+        PARA 'burnup'                 IRRA
+        PARA 'Puissance'   VALU REAL
+        PARA 'CaloUp Dens' VALU REAL
+        PARA 'CaloDw Dens' VALU REAL 
+        PARA 'Mod Dens'    VALU REAL
+        PARA 'Bore ppm'    VALU REAL   
+        PARA 'Fuel Temp'   VALU REAL
+        PARA 'Mod Temp'    VALU REAL
+        PARA 'CaloUp Temp' VALU REAL
+        PARA 'CaloDw Temp' VALU REAL
+        ISOT 3 'U233' 'Pa233' 'Th232'
+        INIT                                                          ;
+
+CompoDbSid1 := COMPO:                      :: 
+        EDIT 0
+        STEP UP <<RepCompo>>
+        COMM 'SCWR64 45 S1'         ENDC
+        PARA 'burnup'                 IRRA
+        PARA 'Puissance'   VALU REAL
+        PARA 'CaloUp Dens' VALU REAL
+        PARA 'CaloDw Dens' VALU REAL 
+        PARA 'Mod Dens'    VALU REAL
+        PARA 'Bore ppm'    VALU REAL   
+        PARA 'Fuel Temp'   VALU REAL
+        PARA 'Mod Temp'    VALU REAL
+        PARA 'CaloUp Temp' VALU REAL
+        PARA 'CaloDw Temp' VALU REAL
+        ISOT 3 'U233' 'Pa233' 'Th232'
+        INIT                                                          ;
+
+CompoDbSid2 := COMPO:                      :: 
+        EDIT 0
+        STEP UP <<RepCompo>>
+        COMM 'SCWR64 45 S2'         ENDC
+        PARA 'burnup'                 IRRA
+        PARA 'Puissance'   VALU REAL
+        PARA 'CaloUp Dens' VALU REAL
+        PARA 'CaloDw Dens' VALU REAL 
+        PARA 'Mod Dens'    VALU REAL
+        PARA 'Bore ppm'    VALU REAL   
+        PARA 'Fuel Temp'   VALU REAL
+        PARA 'Mod Temp'    VALU REAL
+        PARA 'CaloUp Temp' VALU REAL
+        PARA 'CaloDw Temp' VALU REAL
+        ISOT 3 'U233' 'Pa233' 'Th232'
+        INIT                                                          ;
+
+ECHO "Creation de la multicompo 45"                                   ;
+
+
+ENDIF                                                                 ;
+
+BiblioTmp := BiblioInt ;
+
+*-------
+* Boucle d evolution, condition binaire si le nombre de jours d evolution est atteint
+*-------
+
+WHILE NbJours TempsFin <=  DO
+
+  BiblioTmp := SHI: BiblioTmp VolumAutoPA LignAutoPA  
+                  :: EDIT 0                                         ;
+
+  BiblioTmp := SHI: BiblioTmp VolumAutoPB LignAutoPB  
+                  :: EDIT 0                                         ;
+
+  BiblioTmp := SHI: BiblioTmp VolumAutoPC LignAutoPC  
+                  :: EDIT 0                                         ;
+
+  PIJ          := ASM: BiblioTmp VolumFluS LignFluS           
+                  :: EDIT 0                                         ;
+
+  IF iBurn 0. = THEN 
+
+*------------------------------------------------------
+* Mise à jour du flux complet 
+* 1- autoprotection
+* 2- assemblage, matrice des PIJ
+* 3- calcul de flux, keff 
+* 4- edition pour condenser et preparer multicompo
+* 5- sauvegarde du flux dans le fichier d edition 
+* 6- calcul d evolution
+* 7- ajout dans la multicompo 
+*------------------------------------------------------
+    Flux         := FLU: PIJ BiblioTmp VolumFluS                
+                    :: EDIT 0 TYPE K B0                               ;
+
+    Editing      := EDI:  Flux BiblioTmp VolumFluS      
+                    :: EDIT 0 COND  820000. 2.87
+                       MERG REGI
+
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0  
+
+
+                       MICR 18
+       Np239 Pu238 Pu239 Pu240 Pu241 Pu242 Th232 Pa233 U233 
+       Gd152 Gd154 Gd155 Gd156 Gd157 Gd158 Gd160
+       Sm149 Xe135  
+       SAVE ;
+       
+    Editing2      := EDI:  Flux BiblioTmp VolumFluS               
+                    :: EDIT 0 COND  820000. 2.87
+                       MERG REGI  
+
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0  
+
+
+                       MICR 18
+       Np239 Pu238 Pu239 Pu240 Pu241 Pu242 Th232 Pa233 U233 
+       Gd152 Gd154 Gd155 Gd156 Gd157 Gd158 Gd160
+       Sm149 Xe135  
+       SAVE             ;
+       
+    Editing3      := EDI:  Flux BiblioTmp VolumFluS               
+                    :: EDIT 0 COND  820000. 2.87
+                       MERG REGI  
+0 0 0 0 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0  
+ 
+
+
+                       MICR 18
+       Np239 Pu238 Pu239 Pu240 Pu241 Pu242 Th232 Pa233 U233 
+       Gd152 Gd154 Gd155 Gd156 Gd157 Gd158 Gd160
+       Sm149 Xe135  
+       SAVE             ;
+       
+    Editing4      := EDI:  Flux BiblioTmp VolumFluS               
+                    :: EDIT 0 COND  820000. 2.87
+                       MERG REGI 
+
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0  
+
+                       MICR 18
+       Np239 Pu238 Pu239 Pu240 Pu241 Pu242 Th232 Pa233 U233 
+       Gd152 Gd154 Gd155 Gd156 Gd157 Gd158 Gd160
+       Sm149 Xe135  
+       SAVE             ;
+
+        EditR1       := EDI: Flux BiblioTmp VolumFluS
+                         :: EDIT 0 COND 820000. 2.87 
+                         MERG REGI  
+
+0 1 1 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0  
+
+                         SAVE ON 'REFL       1'                       ;                  
+ 
+        CompoRefl1         := CPO: EditR1 
+                          :: EDIT 0  
+                          STEP 'REFL       1'
+                          NAME 'REP_BOTT   1'                         ; 
+                                   
+
+        dbRef1 := CompoRefl1                                          ;
+
+        EditR2       := EDI: Flux BiblioTmp VolumFluS
+                         :: EDIT 0 COND 820000. 2.87 
+                         MERG REGI  
+
+1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0  
+
+                         SAVE ON 'REFL       1'                       ;                  
+ 
+        CompoRefl2         := CPO: EditR2 
+                          :: EDIT 0  
+                          STEP 'REFL       1'
+                          NAME 'REP_BOTT   1'                         ; 
+                                   
+
+        dbRef2 := CompoRefl2                                          ;
+
+        EditR1     EditR2     := DELETE: EditR1 EditR2                ;
+        CompoRefl1 CompoRefl2 := DELETE: CompoRefl1 CompoRefl2        ;
+
+        IF Opt "Side" = THEN 
+
+        ConcIso BiblioTmp := EVO:  BiblioTmp Flux 
+                                        VolumFluS 
+                        ::
+                        EDIT 0
+                        MIXP 
+                        33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 
+                        48 49 50 51 52 53 54 55 56  
+                        DEPL <<Delt>> DAY POWR <<Puissance>>          ;
+
+        ELSEIF Opt "Corn" = THEN  
+
+        ConcIso BiblioTmp := EVO:  BiblioTmp Flux 
+                                        VolumFluS 
+                        ::
+                        EDIT 0
+                        MIXP 
+                        57 58 59 60 61 62 63 64 65 66 67 68 69 70 71 
+                        72 73 74 75 76 77 78 79 80
+                        DEPL <<Delt>> DAY POWR <<Puissance>>          ;
+        ENDIF                                                         ;
+  
+  ELSE 
+
+    Flux         := FLU: Flux PIJ BiblioTmp VolumFluS           
+                    :: EDIT 0 TYPE K B0                               ;
+
+    Editing      := EDI: Editing Flux BiblioTmp VolumFluS      
+                    :: EDIT 0 COND  820000. 2.87
+                       MERG REGI 
+
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0  
+
+
+                       MICR 18
+       Np239 Pu238 Pu239 Pu240 Pu241 Pu242 Th232 Pa233 U233 
+       Gd152 Gd154 Gd155 Gd156 Gd157 Gd158 Gd160
+       Sm149 Xe135  
+       SAVE ;
+       
+    Editing2      := EDI: Editing2 Flux BiblioTmp VolumFluS               
+                    :: EDIT 0 COND  820000. 2.87
+                       MERG REGI  
+
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0  
+
+
+                       MICR 18
+       Np239 Pu238 Pu239 Pu240 Pu241 Pu242 Th232 Pa233 U233 
+       Gd152 Gd154 Gd155 Gd156 Gd157 Gd158 Gd160
+       Sm149 Xe135  
+       SAVE             ;
+       
+    Editing3      := EDI: Editing3 Flux BiblioTmp VolumFluS               
+                    :: EDIT 0 COND  820000. 2.87
+                       MERG REGI 
+
+0 0 0 0 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0  
+
+                       MICR 18
+       Np239 Pu238 Pu239 Pu240 Pu241 Pu242 Th232 Pa233 U233 
+       Gd152 Gd154 Gd155 Gd156 Gd157 Gd158 Gd160
+       Sm149 Xe135  
+       SAVE             ;
+       
+    Editing4      := EDI: Editing4 Flux BiblioTmp VolumFluS               
+                    :: EDIT 0 COND  820000. 2.87
+                       MERG REGI 
+
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0  
+
+                       MICR 18
+       Np239 Pu238 Pu239 Pu240 Pu241 Pu242 Th232 Pa233 U233 
+       Gd152 Gd154 Gd155 Gd156 Gd157 Gd158 Gd160
+       Sm149 Xe135  
+       SAVE             ;
+
+        IF Opt "Side" = THEN 
+
+        ConcIso BiblioTmp := EVO: ConcIso BiblioTmp Flux 
+                                        VolumFluS 
+                        ::
+                        EDIT 0
+                        MIXP 
+                        33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 
+                        48 49 50 51 52 53 54 55 56  
+                        DEPL <<Delt>> DAY POWR <<Puissance>>          ;
+
+        ELSEIF Opt "Corn" = THEN 
+
+        ConcIso BiblioTmp := EVO: ConcIso BiblioTmp Flux 
+                                        VolumFluS 
+                        ::
+                        EDIT 0
+                        MIXP 
+                        57 58 59 60 61 62 63 64 65 66 67 68 69 70 71 
+                        72 73 74 75 76 77 78 79 80
+                        DEPL <<Delt>> DAY POWR <<Puissance>>          ;
+        ENDIF                                                         ;
+
+    ENDIF ; 
+
+    CompoDbCor := COMPO:  CompoDbCor Editing ConcIso  :: 
+                       EDIT 0
+                       STEP UP <<RepCompo>>  
+                       'Puissance'   <<Puissance>>
+                       'CaloUp Dens' <<DensCaloUp>>
+                       'CaloDw Dens' <<DensCaloDw>>
+                       'Mod Dens'    <<DensMod>> 
+                       'Bore ppm'    <<ConcBore>>   
+                       'Fuel Temp'   <<TempFuel>>
+                       'Mod Temp'    <<TempMod>>
+                       'CaloUp Temp' <<TempCaloUp>>
+                       'CaloDw Temp' <<TempCaloDw>>                                                                 
+                       SET <<NbJours>> DAY                            ; 
+
+    CompoDbCorn := COMPO:  CompoDbCorn Editing2 ConcIso  :: 
+                       EDIT 0
+                       STEP UP <<RepCompo>>  
+                       'Puissance'   <<Puissance>>
+                       'CaloUp Dens' <<DensCaloUp>>
+                       'CaloDw Dens' <<DensCaloDw>>
+                       'Mod Dens'    <<DensMod>> 
+                       'Bore ppm'    <<ConcBore>>   
+                       'Fuel Temp'   <<TempFuel>>
+                       'Mod Temp'    <<TempMod>>
+                       'CaloUp Temp' <<TempCaloUp>>
+                       'CaloDw Temp' <<TempCaloDw>>                                                                 
+                       SET <<NbJours>> DAY                            ;
+
+    CompoDbSid1 := COMPO:  CompoDbSid1 Editing3 ConcIso  :: 
+                       EDIT 0
+                       STEP UP <<RepCompo>>  
+                       'Puissance'   <<Puissance>>
+                       'CaloUp Dens' <<DensCaloUp>>
+                       'CaloDw Dens' <<DensCaloDw>>
+                       'Mod Dens'    <<DensMod>> 
+                       'Bore ppm'    <<ConcBore>>   
+                       'Fuel Temp'   <<TempFuel>>
+                       'Mod Temp'    <<TempMod>>
+                       'CaloUp Temp' <<TempCaloUp>>
+                       'CaloDw Temp' <<TempCaloDw>>                                                                 
+                       SET <<NbJours>> DAY                            ; 
+
+    CompoDbSid2 := COMPO:  CompoDbSid2 Editing4 ConcIso  :: 
+                       EDIT 0
+                       STEP UP <<RepCompo>>  
+                       'Puissance'   <<Puissance>>
+                       'CaloUp Dens' <<DensCaloUp>>
+                       'CaloDw Dens' <<DensCaloDw>>
+                       'Mod Dens'    <<DensMod>> 
+                       'Bore ppm'    <<ConcBore>>   
+                       'Fuel Temp'   <<TempFuel>>
+                       'Mod Temp'    <<TempMod>>
+                       'CaloUp Temp' <<TempCaloUp>>
+                       'CaloDw Temp' <<TempCaloDw>>                                                                 
+                       SET <<NbJours>> DAY                            ; 
+                                   
+
+ 
+  EVALUATE NumEtape := NumEtape 1 +                                   ;
+
+  
+*------------------------------------------------------
+* Sortie du nombre de jours et de l avancement de burnup
+* Sortie du k-eff 
+* Incrementation du compteur d etapes et de l avancement de burnup 
+*------------------------------------------------------
+
+  PIJ          := DELETE: PIJ                                         ;
+ 
+*------------------------------------------------------
+* Condition de sortie de boucle si evolution terminee
+*------------------------------------------------------
+   EVALUATE NbJours  := NbJours Delt +                               ;
+   
+*-------------------------------------------
+* Mise a jour des compteurs etapes et burnup
+*-------------------------------------------
+
+  EVALUATE NbEtapes := NbEtapes 1 +                     ;
+  EVALUATE dBurn    := Puissance Delt *                 ;
+  EVALUATE iBurn    := iBurn dBurn  +                   ;
+
+*-------------------------------------------
+* Changer le pas de temps et sortie de boucle si evolution pas terminee
+*-------------------------------------------
+
+IF LoadModel "3c" = THEN 
+
+  IF NbJours  1.       = THEN                                           
+     EVALUATE Delt  := 4.                               ;
+  ELSEIF NbJours 5.    = THEN 
+     EVALUATE Delt  := 5.                               ;   
+  ELSEIF NbJours 10.   = THEN 
+     EVALUATE Delt  := 10.                              ; 
+  ELSEIF NbJours 50.   = THEN 
+     EVALUATE Delt  := 20.                              ; 
+  ELSEIF NbJours 150.  = THEN 
+     EVALUATE Delt  := 50.                              ;  
+  ELSEIF NbJours 400.  = THEN 
+     EVALUATE Delt  := 35.                               ;  
+  ELSEIF NbJours 435.  = THEN 
+     EVALUATE Delt  := 10.                               ;
+  ELSEIF NbJours 485.  = THEN 
+     EVALUATE Delt  := 20.                              ;  
+  ELSEIF NbJours 585.  = THEN 
+     EVALUATE Delt  := 50.                              ;
+  ELSEIF NbJours 835.  = THEN 
+     EVALUATE Delt  := 35.                               ;  
+  ELSEIF NbJours 870.  = THEN  
+     EVALUATE Delt  := 10.                               ;
+  ELSEIF NbJours 920.  = THEN 
+     EVALUATE Delt  := 20.                              ;  
+  ELSEIF NbJours 1020. = THEN 
+     EVALUATE Delt  := 50.                              ;
+  ELSEIF NbJours 1270. = THEN 
+     EVALUATE Delt  := 35.                               ;  
+  ELSEIF NbJours 1305. = THEN  
+     EVALUATE Delt  := 10.                              ; 
+  ELSEIF NbJours 1355. = THEN 
+     EVALUATE Delt  := 20.                              ;  
+  ELSEIF NbJours 1455. = THEN 
+     EVALUATE Delt  := 50.                              ;
+  ELSEIF NbJours 1705. = THEN 
+     EVALUATE Delt  := 5.                               ;
+  ELSEIF NbJours 1710. = THEN
+     EVALUATE Delt  := 30.                              ;
+     EVALUATE ARRET := 1                                ;       
+  ENDIF                                                 ;
+
+ELSE
+
+  IF NbJours  1.       = THEN                                           
+     EVALUATE Delt  := 4.                               ;
+  ELSEIF NbJours 5.    = THEN 
+     EVALUATE Delt  := 5.                               ;   
+  ELSEIF NbJours 10.   = THEN 
+     EVALUATE Delt  := 10.                              ; 
+  ELSEIF NbJours 50.   = THEN 
+     EVALUATE Delt  := 20.                              ; 
+  ELSEIF NbJours 150.  = THEN 
+     EVALUATE Delt  := 50.                              ;  
+  ELSEIF NbJours 300.  = THEN 
+     EVALUATE Delt  := 55.                               ;  
+  ELSEIF NbJours 355.  = THEN 
+     EVALUATE Delt  := 10.                               ;
+  ELSEIF NbJours 405.  = THEN 
+     EVALUATE Delt  := 20.                              ;  
+  ELSEIF NbJours 505.  = THEN 
+     EVALUATE Delt  := 50.                              ;
+  ELSEIF NbJours 655.  = THEN 
+     EVALUATE Delt  := 55.                               ;  
+  ELSEIF NbJours 710.  = THEN  
+     EVALUATE Delt  := 10.                               ;
+  ELSEIF NbJours 760.  = THEN 
+     EVALUATE Delt  := 20.                              ;  
+  ELSEIF NbJours 860.  = THEN 
+     EVALUATE Delt  := 50.                              ;
+  ELSEIF NbJours 1010. = THEN 
+     EVALUATE Delt  := 55.                               ;  
+  ELSEIF NbJours 1065. = THEN  
+     EVALUATE Delt  := 10.                              ; 
+  ELSEIF NbJours 1115. = THEN 
+     EVALUATE Delt  := 20.                              ;  
+  ELSEIF NbJours 1215. = THEN 
+     EVALUATE Delt  := 50.                              ;
+  ELSEIF NbJours 1365. = THEN 
+     EVALUATE Delt  := 55.                              ;
+  ELSEIF NbJours 1420. = THEN 
+     EVALUATE Delt  := 10.                              ;
+  ELSEIF NbJours 1470. = THEN 
+     EVALUATE Delt  := 20.                              ;
+  ELSEIF NbJours 1570. = THEN 
+     EVALUATE Delt  := 50.                              ;
+  ELSEIF NbJours 1720. = THEN 
+     EVALUATE Delt  := 25.                              ;
+  ELSEIF NbJours 1745. = THEN
+     EVALUATE Delt  := 30.                              ;
+     EVALUATE ARRET := 1                                ;       
+  ENDIF                                                 ;
+
+ENDIF ;
+
+ENDWHILE                                                             ;
+
+
+
+
+  BiblioTmp := SHI: BiblioTmp VolumAutoPA LignAutoPA  
+                  :: EDIT 0                                         ;
+
+  BiblioTmp := SHI: BiblioTmp VolumAutoPB LignAutoPB  
+                  :: EDIT 0                                         ;
+
+  BiblioTmp := SHI: BiblioTmp VolumAutoPC LignAutoPC  
+                  :: EDIT 0                                         ;
+
+  PIJ          := ASM: BiblioTmp VolumFluS LignFluS           
+                  :: EDIT 0                                         ;
+
+Flux         := FLU: Flux PIJ BiblioTmp VolumFluS           
+                    :: EDIT 0 TYPE K B0                               ;
+
+    Editing      := EDI: Editing Flux BiblioTmp VolumFluS      
+                    :: EDIT 0 COND  820000. 2.87
+                       MERG REGI 
+
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0  
+
+
+                       MICR 18
+       Np239 Pu238 Pu239 Pu240 Pu241 Pu242 Th232 Pa233 U233 
+       Gd152 Gd154 Gd155 Gd156 Gd157 Gd158 Gd160
+       Sm149 Xe135  
+       SAVE ;
+       
+    Editing2      := EDI: Editing2 Flux BiblioTmp VolumFluS               
+                    :: EDIT 0 COND  820000. 2.87
+                       MERG REGI  
+
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0  
+
+
+                       MICR 18
+       Np239 Pu238 Pu239 Pu240 Pu241 Pu242 Th232 Pa233 U233 
+       Gd152 Gd154 Gd155 Gd156 Gd157 Gd158 Gd160
+       Sm149 Xe135  
+       SAVE             ;
+       
+    Editing3      := EDI: Editing3 Flux BiblioTmp VolumFluS               
+                    :: EDIT 0 COND  820000. 2.87
+                       MERG REGI 
+
+0 0 0 0 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0  
+
+                       MICR 18
+       Np239 Pu238 Pu239 Pu240 Pu241 Pu242 Th232 Pa233 U233 
+       Gd152 Gd154 Gd155 Gd156 Gd157 Gd158 Gd160
+       Sm149 Xe135  
+       SAVE             ;
+       
+    Editing4      := EDI: Editing4 Flux BiblioTmp VolumFluS               
+                    :: EDIT 0 COND  820000. 2.87
+                       MERG REGI 
+
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  
+1 1 1 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  
+0 0 0 0  
+
+                       MICR 18
+       Np239 Pu238 Pu239 Pu240 Pu241 Pu242 Th232 Pa233 U233 
+       Gd152 Gd154 Gd155 Gd156 Gd157 Gd158 Gd160
+       Sm149 Xe135  
+       SAVE             ;
+
+
+*----------------------------------------------------------------
+* Sortie du nombre d etapes 
+*----------------------------------------------------------------
+ECHO "Nombre etapes = " NbEtapes " pour " RepCompo                   ;
+
+*----------------------------------------------------------------
+* Copie de ComopDb dans dbXXX pour sortie de procedure 
+*----------------------------------------------------------------
+dbSid1XXX := CompoDbSid1                                             ;
+dbSid2XXX := CompoDbSid2                                             ;
+dbCorXXX  := CompoDbCor                                              ;
+dbCornXXX := CompoDbCorn                                             ;
+
+END: ;
+QUIT "LIST" .

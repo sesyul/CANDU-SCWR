@@ -1,0 +1,247 @@
+*Deck SCWR64Evop6 normal version
+*--------------------
+* Nom          : SCWR64Evop6.c2m
+* Utilisation  : Calcul de flux d autoprotection et d evolution pour perturbations (hors puissance)
+* Auteur       : U. Le Tennier 
+* Date         : 16/08/2019
+* Modifier     : /
+*
+*---------------------------
+* DESCRIPTION DE LA PROCEDURE
+* Realisation de l autoprotection sur bibliotheque perturbee 
+* Realisation du calcul de flux 
+* Realisation du fichier d edition de perturbations 
+* 64 crayons de combustible
+*
+*       EditPer ConcIso := SCWR64PEvos EditPer VolumAutoPP VolumFlxP ConcIso 
+*       BiblioPer LignAutoPP LignFlxP  :: <<ITERATION>>    <<NbEtapes>> 
+*       <<Ipert>> <<Puissance>> <<DensCaloUp>> <<DensCaloDw>> <<DensMod>>
+*       <<ConcBore>> <<TempFuel>> <<TempMod>> <TempCaloUp>> 
+*       <<TempCaloDw>>                                                  ;
+*
+* FICHIERS ECHANGES 
+* VolumFlxP     : Tracking pour le flux
+* VolumAutoPP   : Tracking pour l autoprotection
+* EditPer       : Fichier d edition perturbe contenant les informations pour ajouter dans une multicompo  
+* ConcIso       : Concentration isotopique en fonction du temps recuperee d EVO: en fonctionnement nominal
+* BiblioPer     : Bibliotheque perturbee 
+* LignFlxP      : Lignes d integrations pour le flux perturbe 
+* LignAutoPP    : Lignes d integrations pour l autoprotection perturbe 
+*
+* FICHIERS INTERNES
+* PIJ           : Fichier de matrice PIJ 
+* BiblioTmp     : Bibliotheque temporaire (a autoproteger)
+* Flux          : Fichier de flux 
+*
+* VARIABLES ECHANGES 
+* ITERATION     : Indice pour determiner l enrichissement a realiser 
+* NbEtapes      : Nombre d iterations necessaires pour le calcul d evolution 
+* Ipert         : Indice de perturbation, combien de fois ont ete parcourus les pas d evolution
+* Puissance     : Puissance de grappe               (kW/kg)
+* DensCaloUp    : Densite du caloporteur ascendant  (g/cm3)
+* DensCaloDw    : Densite du caloporteur descendant (g/cm3)
+* DensMod       : Densite du moderateur             (g/cm3)
+* ConcBore      : Quantite de bore a ajouter au mod (%mass) 
+* TempFuel      : Temperature du combustible        (K)
+* TempMod       : Temperature du moderateur         (K)
+* TempCaloUp    : Temperature du caloporteur asc    (K)
+* TempCaloDw    : Temperature du caloporteur dsc    (K)
+*
+* VARIABLES INTERNES 
+* IEtape        : Increment de boucle WHILE 
+* CorrNum       : Correction de l increment pour sauvegarder dans le bon repertoire du fichier EDI 
+* keff          : K-EFFECTIVE
+* Sigma1        : Section efficace totale du premier groupe                             (b)
+* Sigma2        : Section efficace totale du deuxieme groupe                            (b)
+* Sigma3        : Section efficace totale du troisieme groupe                           (b)
+* SigmaF1       : Section efficace fission du premier groupe                            (b)
+* SigmaF2       : Section efficace fission du deuxieme groupe                           (b)
+* SigmaF3       : Section efficace fission du troisieme groupe                          (b)
+* BurnEtape     : Etape de burnup consideree, recuperee vie RepBurn
+* Rep           : Repertoire ou sont stockees les informations dans chaque Edit
+* NameSubDir    : Nom du sous-repertoire dans chaque Edit ou les informations d interpolation sont stockees
+* RepBurn       : Repertoire du fichier ConcIso ou aller chercher le BURNUP-IRRAD pour le nombre de jours 
+*    
+*-------------------------------------------------------------------------
+* Definition des structures de donnees a echanger
+*-------------------------------------------------------------------------
+PARAMETER EditPer VolumAutoPP VolumFlxP ConcIso 
+          BiblioPer LignAutoPP  LignFlxP  :: 
+    ::: LINKED_LIST    EditPer VolumAutoPP VolumFlxP                  ;
+    ::: LINKED_LIST    ConcIso BiblioPer                              ;
+    ::: SEQ_BINARY     LignAutoPP  LignFlxP                           ; ;
+ 
+*-------------------------------------------------------------------------
+* Definition des modules, procedures et structures de données locales
+*-------------------------------------------------------------------------
+MODULE SHI: ASM: FLU: EDI: GREP: DELETE: END: LIB: 
+       UTL: RECOVER:  BACKUP:                                  ;
+LINKED_LIST Flux BiblioTmp                                     ;
+XSM_FILE    PIJ                                                ;
+
+*-------------------------------------------------------------------------
+* Recuperation d informations transmises a la procedure 
+*-------------------------------------------------------------------------
+INTEGER ITERATION     NbEtapes     Ipert             ;
+::    >>ITERATION<< >>NbEtapes<< >>Ipert<<           ;
+REAL  Puissance      DensCaloUp      DensCaloDw       ;
+::  >>Puissance<<  >>DensCaloUp<<  >>DensCaloDw<<     ;
+REAL  DensMod     ConcBore       TempFuel             ;
+::  >>DensMod<< >>ConcBore<<   >>TempFuel<<           ;
+REAL  TempMod     TempCaloUp     TempCaloDw           ;
+::  >>TempMod<< >>TempCaloUp<< >>TempCaloDw<<         ;
+
+*--------------------------------------------------------------------------
+* Copie des fichiers d entree dans les fichiers temporaires   
+*--------------------------------------------------------------------------
+
+BiblioTmp  := BiblioPer                                      ;
+
+*--------------------------------------------------------------------------
+* Variables locales et mise a jour du nombre d etapes
+*--------------------------------------------------------------------------
+
+INTEGER IEtape CorrNum := 1 0                              ;
+REAL    keff Sigma1 Sigma2 Sigma3 SigmaF1 SigmaF2 SigmaF3    ;
+REAL    NbJours BurnEtape                                    ;
+STRING  NameSubDir Rep RepBurn                               ; 
+
+EVALUATE NameSubDir := 'COMPO_DATA'                          ;
+
+*--------------------------------------------------------------------------
+* Ipert sur toute l evolution
+*--------------------------------------------------------------------------
+
+WHILE IEtape NbEtapes <= DO 
+*------------------------------------------------------
+* Mise à jour de la bibliotheque grace a ConcIso 
+*------------------------------------------------------
+  IF IEtape 1 > THEN 
+
+    BiblioTmp := LIB: BiblioTmp ConcIso ::
+              BURN <<IEtape>> 
+              MIX 9  MIX 10 MIX 11 MIX 12 MIX 13 MIX 14 MIX 15 MIX 16 
+              MIX 17 MIX 18 MIX 19 MIX 20 MIX 21 MIX 22 MIX 23 MIX 24  
+              MIX 25 MIX 26 MIX 27 MIX 28 MIX 29 MIX 30 MIX 31 MIX 32 ;  
+
+
+  ENDIF                                                               ;
+
+*------------------------------------------------------
+* Mise à jour du flux complet 
+* 1- realisation de la bibliotheque autoP pour le module SHI
+* 2- assemblage, matrice des PIJ 
+* 3- calcul de flux
+* 4- edition pour condensensation + sauvegarde des donnees importantes
+*------------------------------------------------------
+
+    BiblioTmp    := SHI: BiblioTmp VolumAutoPP LignAutoPP  
+                    :: EDIT 0                                         ;
+    PIJ          := ASM: BiblioTmp VolumFlxP LignFlxP           
+                  :: EDIT 0                                           ;  
+    Flux         := FLU: PIJ BiblioTmp VolumFlxP                
+                      :: TYPE K B0                                    ;
+  *------------------------------------------------------
+  * Si le fichier Edit n a pas encore ete cree 
+  *------------------------------------------------------
+  IF Ipert   1 = THEN 
+
+    IF IEtape 1 = THEN 
+
+    EditPer   := EDI: Flux BiblioTmp VolumFlxP               
+                    :: COND  820000. 2.87
+                       MERG COMP 
+                       MICR 18
+       Np239 Pu238 Pu239 Pu240 Pu241 Pu242 Th232 Pa233 U233 
+       Gd152 Gd154 Gd155 Gd156 Gd157 Gd158 Gd160
+       Sm149 Xe135  
+       SAVE                                                           ;
+
+    ELSE
+
+    EditPer   := EDI: EditPer Flux BiblioTmp VolumFlxP               
+                    :: COND  820000. 2.87
+                       MERG COMP 
+                       MICR 18
+       Np239 Pu238 Pu239 Pu240 Pu241 Pu242 Th232 Pa233 U233 
+       Gd152 Gd154 Gd155 Gd156 Gd157 Gd158 Gd160
+       Sm149 Xe135  
+       SAVE                                                           ;  
+
+    ENDIF                                                             ;
+
+  ELSE 
+
+  *------------------------------------------------------
+  * Si le fichier Edit a deja ete cree 
+  *------------------------------------------------------
+
+  EditPer   := EDI: EditPer Flux BiblioTmp VolumFlxP               
+                    :: COND  820000. 2.87
+                       MERG COMP 
+                       MICR 18
+       Np239 Pu238 Pu239 Pu240 Pu241 Pu242 Th232 Pa233 U233 
+       Gd152 Gd154 Gd155 Gd156 Gd157 Gd158 Gd160
+       Sm149 Xe135  
+       SAVE                                                           ;
+
+  ENDIF                                                               ;
+
+  *-------------
+  * Determination du nom du repertoire 
+  *------------- 
+
+  EVALUATE CorrNum := Ipert 1 - NbEtapes * IEtape +                ;
+
+  IF CorrNum 10 < THEN 
+    EVALUATE Rep := 'REF-CASE000' CorrNum I_TO_S +                    ;
+  ELSEIF CorrNum 100 < THEN  
+    EVALUATE Rep := 'REF-CASE00'  CorrNum I_TO_S +                    ;
+  ELSE 
+    EVALUATE Rep := 'REF-CASE0'   CorrNum I_TO_S +                    ;
+  ENDIF                                                               ;
+
+  *-------------
+  * Recuperation du temps ecoule pour le sauvegarder dans le fichier edit 
+  *-------------
+
+  IF IEtape 10 < THEN
+    EVALUATE RepBurn := 'DEPL-DAT000' IEtape I_TO_S +      ;
+  ELSEIF IEtape 100 < THEN
+    EVALUATE RepBurn := 'DEPL-DAT00'  IEtape I_TO_S +      ;
+  ELSE 
+    EVALUATE RepBurn := 'DEPL-DAT0'   IEtape I_TO_S +      ;
+  ENDIF                                                      ;
+
+  GREP: ConcIso :: 
+                 STEP UP <<RepBurn>> 
+                 GETVAL 'BURNUP-IRRAD' 1 >>BurnEtape<<       ;
+
+  EVALUATE NbJours := BurnEtape Puissance /                  ;
+
+  *-------------
+  * Sauvegarde des coordonnees d interpolation dans le COMPO_DATA 
+  *-------------  
+
+  EditPer   := UTL: EditPer 
+               :: STEP UP <<Rep>>
+               CREA <<NameSubDir>> 
+               10 = <<Puissance>> <<DensCaloUp>> <<DensCaloDw>> 
+                   <<DensMod>>   <<ConcBore>>   <<TempFuel>> 
+                   <<TempMod>>   <<TempCaloUp>> <<TempCaloDw>>
+                   <<NbJours>>                                        ;
+ 
+*------------------------------------------------------
+* Nettoyage 
+*------------------------------------------------------
+
+  PIJ Flux           := DELETE: PIJ Flux                                ;
+
+  EVALUATE IEtape := IEtape 1 +                          ; 
+
+ENDWHILE                                                              ;
+
+BiblioTmp             := DELETE: BiblioTmp                            ;
+
+END: ;
+QUIT "LIST" .

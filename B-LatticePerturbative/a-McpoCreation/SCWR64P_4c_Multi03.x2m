@@ -1,0 +1,249 @@
+*Deck MultiCompoCelluleSCWR2DPert debug version
+*--------------------
+* Nom          : SCWR64PMulti.x2m
+* Utilisation  : Creation de la base de donnees avec perturbations 
+* Auteur       : U. Le Tennier 
+* Date         : 23/09/2019
+* Modifier     : /
+*
+*---------------------------
+* DESCRIPTION DE LA PROCEDURE
+* Utilisation des fichiers d edition et burnup perturbes pour enrichissement de la multicompo
+* 64 crayons de combustible
+*
+*
+* FICHIERS INTERNES
+*
+* VARIABLES INTERNES
+* ITERATION     : Indice pour determiner l enrichissement a realiser 
+* NbEtapesTot      : Nombre d iterations necessaires pour le calcul d evolution 
+* Boucle        : Indice de boucle, combien de fois ont ete parcourus les pas d evolution
+* Puissance     : Puissance de grappe               (kW/kg)
+* DensCaloUp    : Densite du caloporteur ascendant  (g/cm3)
+* DensCaloDw    : Densite du caloporteur descendant (g/cm3)
+* DensMod       : Densite du moderateur             (g/cm3)
+* ConcBore      : Quantite de bore a ajouter au mod (%mass) 
+* TempFuel      : Temperature du combustible        (K)
+* TempMod       : Temperature du moderateur         (K)
+* TempCaloUp    : Temperature du caloporteur asc    (K)
+* TempCaloDw    : Temperature du caloporteur dsc    (K)
+*
+* VARIABLES INTERNES 
+* NumEtape      : Increment de boucle WHILE 
+* CorrNum       : Correction de l increment pour sauvegarder dans le bon repertoire du fichier EDI 
+* keff          : K-EFFECTIVE
+* Sigma1        : Section efficace totale du premier groupe                             (b)
+* Sigma2        : Section efficace totale du deuxieme groupe                            (b)
+* Sigma3        : Section efficace totale du troisieme groupe                           (b)
+* SigmaF1       : Section efficace fission du premier groupe                            (b)
+* SigmaF2       : Section efficace fission du deuxieme groupe                           (b)
+* SigmaF3       : Section efficace fission du troisieme groupe                          (b)
+* BurnEtape     : Etape de burnup consideree, recuperee vie RepBurn
+* Rep           : Repertoire ou sont stockees les informations dans chaque Edit
+* NameSubDir    : Nom du sous-repertoire dans chaque Edit ou les informations d interpolation sont stockees
+* RepBurn       : Repertoire du fichier ConcIso ou aller chercher le BURNUP-IRRAD pour le nombre de jours 
+*    
+*-------------------------------------------------------------------------
+* Definition des modules, procedures et structures de données 
+*-------------------------------------------------------------------------
+MODULE GREP: COMPO: DELETE: END: UTL:                          ;
+LINKED_LIST ConcPer03                                          ;
+LINKED_LIST Edit03                                             ;
+LINKED_LIST Db03                                               ;
+SEQ_ASCII DbRef03 ; 
+SEQ_ASCII DbRef03out        :: FILE './03out'                  ;
+SEQ_ASCII ConcIsoRef03 ;
+SEQ_ASCII EditPer03DCd ;
+SEQ_ASCII EditPer03DCu ;
+SEQ_ASCII EditPer03CB  ;
+SEQ_ASCII EditPer03DM  ;
+SEQ_ASCII EditPer03TCd ;
+SEQ_ASCII EditPer03TCu ;
+SEQ_ASCII EditPer03TF  ;
+SEQ_ASCII EditPer03TM  ;
+SEQ_ASCII EditPer03Pui ;
+SEQ_ASCII ConcPer031 ; 
+SEQ_ASCII ConcPer032 ; 
+SEQ_ASCII ConcPer033 ; 
+SEQ_ASCII ConcPer034 ; 
+
+*--------------------------------------------------------------------------
+* Variables locales et mise a jour du nombre d etapes
+*--------------------------------------------------------------------------
+INTEGER SCHEMATMP := 4 ; !3
+INTEGER NbPert IndPert NumEtape NbEtapesTot := 0 0 0 0 ; 
+INTEGER NbEtapes                                       ;
+INTEGER NbEtao  NbEta2o NbEta3o NbEta4o NbEta5o        ;
+INTEGER Saut                                           ; 
+STRING  Rep Num RepCompo SousRep                       ;
+REAL Puissance DensCaloUp DensCaloDw DensMod ConcBore
+TempFuel TempMod TempCaloDw TempCaloUp NbJours         ;
+
+INTEGER a := 1 ;
+
+EVALUATE IndPert  := 1            ;
+EVALUATE NbPert   := 7            ;
+EVALUATE NumEtape := 1            ;
+EVALUATE SousRep  := 'COMPO_DATA' ;
+
+Db03 := DbRef03 ;
+
+*--------------------------------------
+* Determination des valeurs en fonction du nombre de cycles de la multicompo 
+*--------------------------------------
+
+**** ETAPES A SAUTER POUR METTRE DANS LES MULTICOMPO 
+
+IF SCHEMATMP 3 = THEN 
+  EVALUATE NbEtapes := 67  ;
+ELSEIF SCHEMATMP 4 = THEN
+  EVALUATE NbEtapes := 73  ;   
+ENDIF ;
+
+ConcPer03     := ConcIsoRef03  ;
+EVALUATE RepCompo := 'Rep_03'  ;
+
+
+
+WHILE IndPert NbPert < DO 
+
+EVALUATE NumEtape  := 1              ;
+EVALUATE Saut      := NbEtapes       ;
+
+
+IF IndPert 1 = THEN
+  Edit03    := EditPer03DCd ;
+  EVALUATE NbEtapesTot := NbEtapes 4 * ;
+ELSEIF IndPert 2 = THEN 
+  Edit03    := EditPer03DCu ;
+  EVALUATE NbEtapesTot := NbEtapes 4 * ;
+ELSEIF IndPert 3 = THEN 
+  Edit03    := EditPer03CB  ;
+  EVALUATE NbEtapesTot := NbEtapes 4 * ;
+ELSEIF IndPert 4 = THEN 
+  Edit03    := EditPer03TCd ;
+  EVALUATE NbEtapesTot := NbEtapes 3 * ;
+ELSEIF IndPert 5 = THEN 
+  Edit03    := EditPer03TCu ;
+  EVALUATE NbEtapesTot := NbEtapes 4 * ;
+ELSEIF IndPert 6 = THEN 
+  Edit03    := EditPer03TF  ;
+  EVALUATE NbEtapesTot := NbEtapes 4 * ;
+ELSEIF IndPert 7 = THEN 
+  Edit03     := EditPer03Pui ;
+
+  EVALUATE NbEtapesTot := NbEtapes 4 * ;
+
+  EVALUATE NbEtao    := NbEtapes 1 +                                ;
+  EVALUATE NbEta2o   := NbEtapes 2 * 1 +                            ;
+  EVALUATE NbEta3o   := NbEtapes 3 * 1 +                            ;
+  EVALUATE NbEta4o   := NbEtapes 4 * 1 +                            ;
+  EVALUATE NbEta5o   := NbEtapes 5 * 1 +                            ;
+
+ENDIF                            ;
+
+WHILE NumEtape NbEtapesTot < DO 
+
+IF NumEtape 10 < THEN 
+  EVALUATE Rep := 'REF-CASE000' NumEtape I_TO_S +              ;
+  EVALUATE Num := '000' NumEtape I_TO_S +              ;
+ELSEIF NumEtape 100 < THEN  
+  EVALUATE Rep := 'REF-CASE00'  NumEtape I_TO_S +              ;
+  EVALUATE Num := '00' NumEtape I_TO_S +              ;
+ELSEIF NumEtape 1000 < THEN 
+  EVALUATE Rep := 'REF-CASE0'   NumEtape I_TO_S +              ;
+  EVALUATE Num := '0' NumEtape I_TO_S +               ;
+ELSEIF NumEtape 10000 < THEN 
+  EVALUATE Rep := 'REF-CASE'   NumEtape I_TO_S +              ;
+  EVALUATE Num := '' NumEtape I_TO_S +               ;
+ENDIF                                                         ;
+
+*--------------------------------------
+* Recuperation du bon fichier de burnup pour perturbation de puissance
+*--------------------------------------
+
+IF IndPert 7 = THEN 
+
+  IF NumEtape 1 = THEN
+    ConcPer03 := DELETE: ConcPer03 ;
+    ConcPer03 := ConcPer031     ;
+    EVALUATE a := 1 ;
+  ELSEIF NumEtape NbEtao = THEN 
+    ConcPer03 := DELETE: ConcPer03 ;
+    ConcPer03 := ConcPer032     ;
+    EVALUATE a := 2 ;
+  ELSEIF NumEtape NbEta2o = THEN 
+    ConcPer03 := DELETE: ConcPer03 ;
+    ConcPer03 := ConcPer033     ;
+    EVALUATE a := 3 ;
+  ELSEIF NumEtape NbEta3o = THEN 
+    ConcPer03 := DELETE: ConcPer03 ;
+    ConcPer03 := ConcPer034  ;
+    EVALUATE a := 4 ;
+  ENDIF                          ;
+
+ENDIF                            ;
+
+GREP: Edit03 :: STEP UP <<Rep>>
+                GETVAL <<SousRep>> 1 NVAL 10 
+                >>Puissance<< >>DensCaloUp<< >>DensCaloDw<< 
+                >>DensMod<<   >>ConcBore<<   >>TempFuel<< 
+                >>TempMod<<   >>TempCaloUp<< >>TempCaloDw<<
+                >>NbJours<<                              ;
+
+IF IndPert 7 = THEN 
+ELSE
+  EVALUATE Puissance := 38.4 ;
+  EVALUATE NbJours   := NbJours 57.61 * 38.4 / ;
+ENDIF ;
+
+
+ECHO "<.days.> " NbJours               ;
+
+IF NumEtape Saut = THEN 
+  EVALUATE Saut := Saut NbEtapes + ;
+ELSE 
+
+Edit03 := UTL: Edit03 :: 
+*DEL 'LAST-EDIT' 
+  CREA 'LAST-EDIT' 1 3 = 'REF-' 'CASE' <<Num>>  ;
+
+Db03    := COMPO:  Db03 Edit03 ConcPer03  :: 
+        EDIT 0
+        STEP UP <<RepCompo>> 
+         'Puissance'   <<Puissance>>
+         'CaloUp Dens' <<DensCaloUp>>
+         'CaloDw Dens' <<DensCaloDw>>
+         'Mod Dens'    <<DensMod>> 
+         'Bore ppm   '   <<ConcBore>>   
+         'Fuel Temp'   <<TempFuel>>
+         'Mod Temp'    <<TempMod>>
+         'CaloUp Temp' <<TempCaloUp>>
+         'CaloDw Temp' <<TempCaloDw>>
+         SET <<NbJours>> DAY         ;
+
+ENDIF ;
+
+ECHO "<.ind.> " IndPert                                  ;
+ECHO "<.rep.>" Rep IndPert                               ; 
+ECHO "<.days.> " NbJours                                 ;
+
+*--------------------------------------
+* Suppresion des fichiers de burnup pour perturbation suivante
+*--------------------------------------
+
+EVALUATE NumEtape := NumEtape 1 +   ;
+
+
+ENDWHILE ;
+
+EVALUATE IndPert := IndPert 1 +    ;
+Edit03           := DELETE: Edit03 ;
+
+ENDWHILE ;
+
+DbRef03out := Db03 ;
+
+
+END: ;
+QUIT "LIST" .
