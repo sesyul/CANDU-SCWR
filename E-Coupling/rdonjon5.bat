@@ -14,7 +14,7 @@ if "%proc%"=="" GOTO cleanprocs
 del *.c2m *.INP
 :cleanprocs
 if EXIST %entree%.result MOVE %entree%.result ..
-MOVE *.out ..
+MOVE *.OUT ..
 DEL /Q *.*
 cd ..
 rmdir -r temp
