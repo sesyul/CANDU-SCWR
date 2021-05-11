@@ -65,6 +65,7 @@ import os         # Basic operations (management of files)
 import shutil     # Sophisticated operations (management of files)
 import subprocess # Run CATHENA and DONJON 
 
+# PATH_EXEC    = Windows path must be written with "\\" separation mark (ex. "C:\\Users")
 PATH_EXEC    = os.path.dirname(__file__)
 PATH_PROC    = PATH_EXEC+'proc\\'
 
@@ -77,6 +78,6 @@ os.chdir(PATH_EXEC)
 #   2) PATH_PROC     ; str, absolute path where DONJON procedures and databases are stored
 def ReachEqui(PATH_EXEC,PATH_PROC):
             
-    subprocess.run([PATH_EXEC+"rdonjon5.bat", PATH_EXEC+"SCWR64N1Eq.x2m", PATH_PROC])
+    subprocess.run([PATH_EXEC+"rdonjon5.bat", PATH_EXEC+"SCWR64N1Eq", PATH_PROC])
     
     return()
