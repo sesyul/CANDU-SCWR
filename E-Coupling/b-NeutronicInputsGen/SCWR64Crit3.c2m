@@ -1,0 +1,183 @@
+*--------------------
+* Nom          : SCWR64Crit.c2m
+* Utilisation  : Rend le reacteur critique
+* Auteur       : U. Le Tennier d apres M. Paradis et M. Guillet 
+* Date         : 05/12/2019
+* Modifier     : /
+*
+*---------------------------
+* Recherche de la quantite de bore critique
+*
+* FuelMap Matex Flux := SCWR64Crit FuelMap Matex Flux Track MacroRfl 
+*                 dbref_03 dbref_34 dbref_45                 :: 
+*    <<Step>> <<NameCycl>> <<Pui>> <<TempMod>> <<DensMod>> 
+*    <<DensCU1>> <<DensCU2>> <<DensCU3>> 
+*    <<DensCD1>> <<DensCD2>> <<DensCD3>> 
+*    <<TempF1>>  <<TempF2>>  <<TempF3>>  
+*    <<TempCU1>> <<TempCU2>> <<TempCU3>>
+*    <<TempCD1>> <<TempCD2>> <<TempCD3>>                         
+*    >>ppmB<< >>Keff<<             ;                   
+*
+*-------------------------------------------------------------------------
+* Definition des structures de donnees a echanger et des structures locales
+*-------------------------------------------------------------------------
+PARAMETER FuelMap Matex Flux MacroFuel Track MacroRfl 
+          dbref_03  dbref_34  dbref_45 
+          dbref_03c dbref_03s dbref_34c dbref_34s 
+          dbref_45c dbref_45s      :: 
+          ::: LINKED_LIST FuelMap Matex Flux MacroFuel        ;
+          ::: LINKED_LIST Track MacroRfl                      ; 
+          ::: LINKED_LIST dbref_03  dbref_34  dbref_45        ;
+          ::: LINKED_LIST dbref_03c dbref_03s                 ;
+          ::: LINKED_LIST dbref_34c dbref_34s                 ;
+          ::: LINKED_LIST dbref_45c dbref_45s                 ; ;
+
+MODULE TRIVAA: FLUD: FLPOW: DELETE: END: MACINI: GREP: FIND0: ;
+
+LINKED_LIST FluxTmp System FuelMapTmp MacroFl L0 Macro2       ;
+
+PROCEDURE SCWR64MacUp3                                        ;
+
+*-------------------------------------------------------------------------
+* Recuperation des donnees d entree
+*-------------------------------------------------------------------------
+INTEGER Step                                                      ;
+::    >>Step<<                                                    ;
+STRING  NameCycl                                                  ;
+::    >>NameCycl<<                                                ; 
+REAL    Pui     TempMod     DensMod                               ; 
+::    >>Pui<< >>TempMod<< >>DensMod<<                             ;
+REAL    DensCU1     DensCU2     DensCU3     DensCD1     DensCD2     
+        DensCD3     TempF1      TempF2      TempF3      TempCU1 
+        TempCU2     TempCU3     TempCD1     TempCD2     TempCD3   ;
+::    >>DensCU1<< >>DensCU2<< >>DensCU3<< >>DensCD1<< >>DensCD2<<   
+      >>DensCD3<< >>TempF1<<  >>TempF2<<  >>TempF3<<  >>TempCU1<<
+      >>TempCU2<< >>TempCU3<< >>TempCD1<< >>TempCD2<< >>TempCD3<< ;
+
+*-------------------------------------------------------------------------
+* Definition des variables locales
+*-------------------------------------------------------------------------
+REAL Keff KeffI y1 y2 yNew ;
+REAL ppmB ppmB1 ppmB2 CBoreCorr ;
+INTEGER iter ;
+LOGICAL conv ;
+
+EVALUATE ppmB1 ppmB2 := 1. 200.0   ;
+EVALUATE conv        := $False_L      ;
+EVALUATE iter        := 1             ;
+
+ECHO TempCD1 TempCU1 ;
+*-------------------------------------------------------------------------
+* Boucle de convergence en bore 
+*-------------------------------------------------------------------------
+
+REPEAT 
+  IF iter 1 = THEN
+    EVALUATE ppmB := ppmB1 ;
+  ELSEIF iter 2 = THEN
+    EVALUATE ppmB := ppmB2 ;
+  ENDIF ;
+
+  FuelMapTmp := FuelMap ;
+  
+  *----
+  *  Creation macrolib fuel 
+  *----
+
+  ECHO " ITER VAUT " iter ;
+
+  MacroFl := SCWR64MacUp3 dbref_03  dbref_34  dbref_45 FuelMapTmp 
+                          dbref_03c dbref_03s dbref_34c dbref_34s
+                          dbref_45c dbref_45s
+          :: <<TempMod>> <<DensMod>> 
+    <<DensCU1>> <<DensCU2>> <<DensCU3>> 
+    <<DensCD1>> <<DensCD2>> <<DensCD3>> 
+    <<TempF1>>  <<TempF2>>  <<TempF3>>  
+    <<TempCU1>> <<TempCU2>> <<TempCU3>>
+    <<TempCD1>> <<TempCD2>> <<TempCD3>> <<ppmB>>  ;
+  
+
+  *----
+  *  Creation macrolib reacteur et calcul de flux 
+  *----
+
+  Macro2 Matex := MACINI: Matex MacroRfl MacroFl ::
+              EDIT 0 ;
+
+  System  := TRIVAA: Macro2 Track ::
+              EDIT 0  ;
+
+  FluxTmp := FLUD:   System Track ::
+         EDIT 0 ADI 4 
+         EXTE 1000 1.0E-6 
+         THER 1.0E-6 ;
+  
+  GREP: FluxTmp :: GETVAL 'K-EFFECTIVE' 1 >>Keff<< ;
+
+  *----
+  *  Gestion des ordonnes pour resolution a 0  
+  *----
+
+  IF iter 1 =  THEN
+
+    EVALUATE KeffI := Keff ;
+    EVALUATE y1  := 1.0 Keff - ;
+    ECHO "<.keff0.> " Keff NameCycl ;
+    ECHO "<.iter.>  " iter          ;
+
+    IF y1 0. > THEN 
+      EVALUATE conv := $True_L ;
+    ENDIF ;
+
+  ELSEIF iter 2 = THEN 
+
+    EVALUATE y2  := 1.0 Keff - ;
+
+    ECHO "y1 =" y1 ;
+    ECHO "y2 =" y2 ;
+    
+    IF y2 0. < THEN
+     EVALUATE ppmB := ppmB2 ;
+    ELSE
+       L0 := FIND0: :: 
+                       ITMAX 25 TOL 1.E-3 !25.0
+                       POINT X <<ppmB1>> Y <<y1>>
+                       POINT X <<ppmB2>> Y <<y2>>
+                       >>conv<< >>ppmB<< ;
+    ENDIF                                             ;
+
+  ELSE 
+      
+    EVALUATE yNew  := 1.0 Keff - ;
+    L0 := FIND0: L0 :: Y <<yNew>>
+                       >>conv<< >>ppmB<< ;
+  ENDIF ;
+
+  IF conv NOT THEN
+
+    MacroFl Macro2 System FluxTmp FuelMapTmp 
+    := DELETE: 
+    MacroFl Macro2 System FluxTmp FuelMapTmp  ;
+
+  ELSE 
+
+    Flux MacroFuel := FluxTmp MacroFl          ;
+
+  ENDIF ;
+ 
+  ECHO "<.iter.> "  iter    ; 
+  ECHO "<.ppmb.> "  ppmB    ; 
+  ECHO "<.keffF.> " Keff    ;
+
+  EVALUATE iter := iter 1 + ; 
+
+UNTIL conv ;
+
+:: <<ppmB>> <<Keff>> ;
+
+MacroFl Macro2 := DELETE: MacroFl Macro2 ; 
+System FluxTmp := DELETE: System FluxTmp ;
+FuelMapTmp     := DELETE: FuelMapTmp     ;
+
+END: ;
+QUIT "LIST" .
