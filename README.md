@@ -28,7 +28,7 @@ IGE-379 are provided. CSCT-D5C3UsersManual is a technical manual that describes 
 functions contained in E- repertory. IGE-379 is a non-technical manual that gives important
 information about the way to use the coupling program, the way ot oprerates, about the geometry 
 of the core... Before trying to run the main program, it is advised to read carefully IGE-379 
-to understand the big picture. Finally, a short presentation (CSCT_D5C3_slides) is provided. 
+to understand the big picture. Finally, a short presentation (CSCT-D5C3_slides) is provided. 
 It gives partial insights about the coupling program and the different manuals. 
 
 For any additional information, feel free to contact the author at letennier.u@gmail.com. 
