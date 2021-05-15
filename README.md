@@ -1,4 +1,4 @@
-The five repertories contain inputs which were developped in support of a MscA in nuclear engineering
+The five repertories contain inputs which were developped in support of a nuclear engineering MscA
 at Polytechnique Montréal. The thesis carries a coupled thermalhydraulic neutronic study of
 the CANDU-SCWR, a IVth generation reactor cooled with supercritical water. The design considered
 uses all the features proposed before 2020. The code used are DRAGON5/DONJON5 (neutronics) and 
