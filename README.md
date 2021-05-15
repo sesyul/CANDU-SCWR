@@ -1,7 +1,7 @@
 The five repertories contain inputs which were developped in support of a nuclear engineering MscA
 at Polytechnique Montréal. The thesis carries a coupled thermalhydraulic neutronic study of
 the CANDU-SCWR, a IVth generation reactor cooled with supercritical water. The design considered
-uses all the features proposed before 2020. The code used are DRAGON5/DONJON5 (neutronics) and 
+uses all the features proposed before 2020. The codes used are DRAGON5/DONJON5 (neutronics) and 
 CATHENA (thermalhydraulics). DRAGON5 and DONJON5 are developped in Polytechnique Montréal, more
 information is available at https://www.polymtl.ca/merlin/. CATHENA is owned by Canadian Nuclear 
 Laboratories (CNL), its use is restricted therefore the executable is not available here. 
